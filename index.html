@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NexusGames — Free PC Games Hub</title>
+  <meta name="description" content="NexusGames is your ultimate hub for free PC game downloads. Find repacks, DRM-free games, Steam unlocked, and more from the best sites." />
+  <meta name="keywords" content="free pc games, game repacks, drm-free games, fitgirl repacks, steamunlocked, free game downloads" />
+  <meta property="og:title" content="NexusGames — Free PC Games Hub" />
+  <meta property="og:description" content="Your ultimate hub for free PC game downloads — repacks, DRM-free, and more." />
+  <meta property="og:type" content="website" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- React + Babel CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* ===== RESET & ROOT ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cyan:    #00f5ff;
+      --pink:    #ff00a0;
+      --green:   #39ff14;
+      --yellow:  #ffe600;
+      --bg:      #050810;
+      --bg2:     #080d1a;
+      --bg3:     #0d1528;
+      --border:  rgba(0,245,255,0.18);
+      --border2: rgba(255,0,160,0.22);
+      --text:    #c8d8e8;
+      --text2:   #7a9ab8;
+      --glow-c:  0 0 8px rgba(0,245,255,0.7), 0 0 24px rgba(0,245,255,0.3);
+      --glow-p:  0 0 8px rgba(255,0,160,0.7), 0 0 24px rgba(255,0,160,0.3);
+      --glow-g:  0 0 8px rgba(57,255,20,0.7),  0 0 24px rgba(57,255,20,0.3);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Rajdhani', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      cursor: default;
+    }
+
+    /* ===== SCROLLBAR ===== */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg2); }
+    ::-webkit-scrollbar-thumb { background: var(--cyan); border-radius: 3px; }
+
+    /* ===== ANIMATED GRID BACKGROUND ===== */
+    #grid-bg {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(0,245,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,245,255,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      animation: gridMove 20s linear infinite;
+    }
+    @keyframes gridMove {
+      0%   { background-position: 0 0; }
+      100% { background-position: 40px 40px; }
+    }
+
+    /* Vignette overlay */
+    #grid-bg::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 40%, rgba(5,8,16,0.85) 100%);
+    }
+
+    /* ===== SCANLINES ===== */
+    #scanlines {
+      position: fixed; inset: 0; z-index: 1; pointer-events: none;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.06) 2px,
+        rgba(0,0,0,0.06) 4px
+      );
+      animation: scanPan 8s linear infinite;
+    }
+    @keyframes scanPan {
+      0%   { background-position: 0 0; }
+      100% { background-position: 0 200px; }
+    }
+
+    /* ===== LAYOUT WRAPPER ===== */
+    #root { position: relative; z-index: 2; }
+
+    .page-wrap {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    /* ===== TOP BANNER AD ===== */
+    .top-banner-ad {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      padding: 8px 0; min-height: 66px;
+    }
+    .ad-slot {
+      background: linear-gradient(135deg, rgba(0,245,255,0.04), rgba(255,0,160,0.04));
+      border: 1px dashed rgba(0,245,255,0.2);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text2); font-family: 'Share Tech Mono', monospace;
+      font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+      position: relative; overflow: hidden;
+    }
+    .ad-slot::before {
+      content: 'ADVERTISEMENT';
+      position: absolute; top: 4px; left: 8px;
+      font-size: 9px; color: rgba(0,245,255,0.3); letter-spacing: 2px;
+    }
+    .ad-banner-728 { width: 728px; height: 90px; max-width: 100%; }
+    .ad-sky        { width: 160px; height: 600px; }
+    .ad-sq         { width: 150px; height: 150px; }
+    .ad-mid        { width: 468px; height: 60px; max-width: 100%; }
+
+    /* ===== HEADER ===== */
+    header {
+      background: rgba(5,8,16,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+      padding: 0 16px;
+    }
+    .header-inner {
+      max-width: 1400px; margin: 0 auto;
+      display: flex; align-items: center; gap: 16px;
+      height: 68px;
+    }
+
+    /* LOGO */
+    .logo {
+      font-family: 'Orbitron', monospace;
+      font-weight: 900; font-size: 1.5rem;
+      letter-spacing: 2px; white-space: nowrap;
+      text-decoration: none;
+      position: relative; overflow: hidden;
+      animation: glitchLogo 5s infinite;
+      cursor: pointer;
+    }
+    .logo span.nx { color: var(--cyan); text-shadow: var(--glow-c); }
+    .logo span.gm { color: var(--pink); text-shadow: var(--glow-p); }
+
+    @keyframes glitchLogo {
+      0%, 89%, 100% { transform: none; filter: none; }
+      90% { transform: skew(-2deg); filter: hue-rotate(90deg); }
+      91% { transform: skew(0deg) translateX(3px); }
+      92% { transform: none; filter: none; }
+      93% { transform: translateX(-3px); filter: brightness(1.5); }
+      94% { transform: none; filter: none; }
+    }
+    .logo::after {
+      content: attr(data-text);
+      position: absolute; inset: 0;
+      color: var(--pink); opacity: 0;
+      clip-path: inset(40% 0 50% 0);
+      animation: glitchClip 5s infinite;
+    }
+    @keyframes glitchClip {
+      0%, 89%, 100% { opacity: 0; }
+      90% { opacity: 0.6; transform: translateX(-4px); clip-path: inset(20% 0 60% 0); }
+      91% { opacity: 0; }
+      92% { opacity: 0.4; transform: translateX(4px); clip-path: inset(60% 0 20% 0); }
+      93% { opacity: 0; }
+    }
+
+    /* SEARCH */
+    .search-wrap {
+      flex: 1; max-width: 420px;
+      position: relative;
+    }
+    .search-wrap input {
+      width: 100%;
+      background: rgba(0,245,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px 40px 8px 14px;
+      color: var(--text);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .search-wrap input::placeholder { color: var(--text2); }
+    .search-wrap input:focus {
+      border-color: var(--cyan);
+      box-shadow: var(--glow-c);
+    }
+    .search-icon {
+      position: absolute; right: 12px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--text2); font-size: 14px; pointer-events: none;
+    }
+
+    /* HEADER ACTIONS */
+    .header-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+
+    .btn {
+      font-family: 'Orbitron', monospace;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: 1px; text-transform: uppercase;
+      padding: 7px 14px; border-radius: 3px;
+      border: none; cursor: pointer;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+      transition: all 0.2s; white-space: nowrap;
+    }
+    .btn-kofi {
+      background: linear-gradient(135deg, #ff5e5b, #ff8c42);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(255,94,91,0.4);
+    }
+    .btn-kofi:hover { transform: translateY(-1px); box-shadow: 0 0 20px rgba(255,94,91,0.7); }
+
+    .btn-patreon {
+      background: linear-gradient(135deg, #ff424d, #f96854);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(249,104,84,0.4);
+    }
+    .btn-patreon:hover { transform: translateY(-1px); box-shadow: 0 0 20px rgba(249,104,84,0.7); }
+
+    /* ===== CATEGORY NAV ===== */
+    .cat-nav {
+      background: rgba(8,13,26,0.95);
+      border-bottom: 1px solid var(--border);
+      padding: 0 16px;
+      position: sticky; top: 68px; z-index: 99;
+    }
+    .cat-nav-inner {
+      max-width: 1400px; margin: 0 auto;
+      display: flex; gap: 0; overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .cat-nav-inner::-webkit-scrollbar { display: none; }
+
+    .cat-btn {
+      font-family: 'Orbitron', monospace;
+      font-size: 11px; font-weight: 600;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      padding: 14px 20px; border: none; background: none;
+      color: var(--text2); cursor: pointer;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap; transition: all 0.2s;
+      position: relative;
+    }
+    .cat-btn:hover  { color: var(--cyan); }
+    .cat-btn.active { color: var(--cyan); border-bottom-color: var(--cyan); text-shadow: var(--glow-c); }
+
+    .cat-count {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: rgba(0,245,255,0.15); border-radius: 20px;
+      padding: 1px 6px; font-size: 9px; margin-left: 4px;
+      color: var(--cyan);
+    }
+
+    /* ===== MAIN LAYOUT ===== */
+    .main-layout {
+      display: grid;
+      grid-template-columns: 1fr 200px;
+      gap: 24px;
+      max-width: 1400px; margin: 0 auto;
+      padding: 24px 16px;
+    }
+    @media (max-width: 960px) {
+      .main-layout { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+    }
+
+    /* ===== SECTION HEADERS ===== */
+    .section-header {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 18px;
+    }
+    .section-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 14px; font-weight: 700;
+      letter-spacing: 2px; text-transform: uppercase;
+      color: var(--cyan);
+    }
+    .section-line {
+      flex: 1; height: 1px;
+      background: linear-gradient(90deg, var(--cyan), transparent);
+      opacity: 0.4;
+    }
+    .section-tag {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 10px; color: var(--text2);
+      border: 1px solid var(--border); padding: 2px 8px;
+      letter-spacing: 1px;
+    }
+
+    /* ===== FEATURED SECTION ===== */
+    .featured-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+
+    .featured-card {
+      background: linear-gradient(135deg, rgba(13,21,40,0.9), rgba(8,13,26,0.9));
+      border: 1px solid var(--border);
+      border-radius: 6px; padding: 20px;
+      position: relative; overflow: hidden;
+      cursor: pointer; text-decoration: none;
+      display: block;
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+    }
+    .featured-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--cyan), var(--pink));
+    }
+    .featured-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(0,245,255,0.5);
+      box-shadow: 0 8px 32px rgba(0,245,255,0.15);
+    }
+
+    .fc-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+      padding: 3px 8px; border-radius: 2px;
+      margin-bottom: 12px;
+    }
+    .badge-top    { background: rgba(255,230,0,0.15); color: var(--yellow); border: 1px solid rgba(255,230,0,0.3); }
+    .badge-safe   { background: rgba(57,255,20,0.1);  color: var(--green);  border: 1px solid rgba(57,255,20,0.3); }
+    .badge-fast   { background: rgba(0,245,255,0.1);  color: var(--cyan);   border: 1px solid var(--border); }
+    .badge-hot    { background: rgba(255,0,160,0.1);  color: var(--pink);   border: 1px solid var(--border2); }
+
+    .fc-name {
+      font-family: 'Orbitron', monospace;
+      font-size: 15px; font-weight: 700;
+      color: #fff; margin-bottom: 6px;
+    }
+    .fc-desc {
+      font-size: 13px; color: var(--text2);
+      line-height: 1.5; margin-bottom: 14px;
+    }
+    .fc-meta {
+      display: flex; align-items: center; gap: 10px;
+      font-family: 'Share Tech Mono', monospace; font-size: 11px;
+    }
+    .fc-tag {
+      background: rgba(0,245,255,0.08);
+      border: 1px solid var(--border); padding: 2px 7px;
+      color: var(--cyan); border-radius: 2px;
+    }
+    .fc-visit {
+      margin-left: auto; color: var(--pink); font-size: 11px;
+      letter-spacing: 1px;
+    }
+    .fc-corner {
+      position: absolute; bottom: 0; right: 0;
+      width: 60px; height: 60px; pointer-events: none; opacity: 0.06;
+      background: conic-gradient(from 0deg, var(--cyan), var(--pink));
+      border-radius: 50% 0 0 0;
+    }
+
+    /* ===== SITES GRID ===== */
+    .sites-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 36px;
+    }
+
+    .site-card {
+      background: rgba(8,13,26,0.85);
+      border: 1px solid rgba(0,245,255,0.1);
+      border-radius: 5px; padding: 16px;
+      cursor: pointer; text-decoration: none;
+      display: block; position: relative; overflow: hidden;
+      transition: all 0.2s;
+    }
+    .site-card::after {
+      content: ''; position: absolute;
+      bottom: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .site-card:hover {
+      border-color: rgba(0,245,255,0.35);
+      background: rgba(0,245,255,0.04);
+      transform: translateY(-2px);
+    }
+    .site-card:hover::after { opacity: 1; }
+
+    .sc-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+    .sc-icon {
+      width: 36px; height: 36px; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; margin-bottom: 10px;
+    }
+    .sc-name {
+      font-family: 'Orbitron', monospace;
+      font-size: 12px; font-weight: 700; color: #e8f0f8;
+      margin-bottom: 5px; letter-spacing: 0.5px;
+    }
+    .sc-desc { font-size: 12px; color: var(--text2); line-height: 1.4; margin-bottom: 10px; }
+    .sc-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+    .sc-tag {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px; letter-spacing: 1px; text-transform: uppercase;
+      padding: 2px 6px; border-radius: 2px;
+    }
+    .tag-repack { background: rgba(255,0,160,0.12); color: var(--pink); border: 1px solid rgba(255,0,160,0.25); }
+    .tag-drm    { background: rgba(57,255,20,0.08);  color: var(--green); border: 1px solid rgba(57,255,20,0.2); }
+    .tag-steam  { background: rgba(0,245,255,0.08);  color: var(--cyan);  border: 1px solid var(--border); }
+    .tag-crack  { background: rgba(255,230,0,0.08);  color: var(--yellow); border: 1px solid rgba(255,230,0,0.2); }
+    .tag-gen    { background: rgba(180,180,255,0.08); color: #aaa8ff;      border: 1px solid rgba(180,180,255,0.2); }
+
+    .sc-arrow {
+      font-size: 16px; color: var(--text2);
+      transition: color 0.2s, transform 0.2s;
+    }
+    .site-card:hover .sc-arrow { color: var(--cyan); transform: translateX(3px); }
+
+    /* ===== NEWS SECTION ===== */
+    .news-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 14px;
+      margin-bottom: 36px;
+    }
+
+    .news-card {
+      background: rgba(8,13,26,0.85);
+      border: 1px solid rgba(0,245,255,0.1);
+      border-radius: 5px; padding: 18px;
+      position: relative; overflow: hidden;
+      transition: all 0.2s; cursor: pointer;
+    }
+    .news-card:hover {
+      border-color: rgba(255,0,160,0.35);
+      background: rgba(255,0,160,0.03);
+    }
+    .news-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0;
+      width: 3px; height: 100%;
+      background: linear-gradient(180deg, var(--pink), transparent);
+    }
+
+    .nc-cat {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--pink); margin-bottom: 8px;
+    }
+    .nc-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 12px; font-weight: 700; color: #e8f0f8;
+      margin-bottom: 8px; line-height: 1.4;
+    }
+    .nc-body { font-size: 13px; color: var(--text2); line-height: 1.5; margin-bottom: 12px; }
+    .nc-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      font-family: 'Share Tech Mono', monospace; font-size: 10px; color: var(--text2);
+    }
+    .nc-date { display: flex; align-items: center; gap: 4px; }
+    .nc-read { color: var(--cyan); letter-spacing: 1px; }
+
+    /* ===== AD MID-CONTENT ===== */
+    .mid-ad-wrap {
+      display: flex; justify-content: center;
+      margin-bottom: 32px; padding: 12px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ===== SIDEBAR ===== */
+    .sidebar {
+      display: flex; flex-direction: column; gap: 20px;
+    }
+
+    .sidebar-widget {
+      background: rgba(8,13,26,0.9);
+      border: 1px solid var(--border);
+      border-radius: 5px; overflow: hidden;
+    }
+    .sw-header {
+      background: linear-gradient(90deg, rgba(0,245,255,0.1), transparent);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+      font-family: 'Orbitron', monospace;
+      font-size: 10px; font-weight: 700;
+      letter-spacing: 2px; text-transform: uppercase;
+      color: var(--cyan);
+    }
+    .sw-body { padding: 14px; }
+
+    /* Stats widget */
+    .stat-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 0; border-bottom: 1px solid rgba(0,245,255,0.06);
+      font-size: 12px;
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: var(--text2); font-family: 'Share Tech Mono', monospace; font-size: 11px; }
+    .stat-val { color: var(--cyan); font-family: 'Share Tech Mono', monospace; font-weight: 700; font-size: 12px; }
+
+    /* Online counter pulse */
+    .online-dot {
+      display: inline-block; width: 6px; height: 6px;
+      border-radius: 50%; background: var(--green);
+      box-shadow: var(--glow-g); margin-right: 5px;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    /* Top pick */
+    .top-pick {
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .tp-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; border-radius: 3px;
+      background: rgba(0,245,255,0.03);
+      border: 1px solid rgba(0,245,255,0.07);
+      font-size: 12px; cursor: pointer;
+      transition: all 0.15s;
+      text-decoration: none; color: var(--text);
+    }
+    .tp-item:hover { border-color: var(--border); background: rgba(0,245,255,0.07); }
+    .tp-rank { font-family: 'Share Tech Mono', monospace; color: var(--text2); font-size: 10px; width: 16px; }
+    .tp-name { flex: 1; font-size: 11px; }
+    .tp-arrow { color: var(--text2); font-size: 10px; }
+
+    /* ===== SEARCH RESULTS ===== */
+    .search-results-banner {
+      background: rgba(0,245,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 5px; padding: 12px 18px;
+      margin-bottom: 20px;
+      font-family: 'Share Tech Mono', monospace; font-size: 13px;
+      color: var(--cyan);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .search-results-banner button {
+      margin-left: auto; background: none; border: 1px solid var(--border);
+      color: var(--text2); padding: 3px 10px; cursor: pointer;
+      font-family: 'Share Tech Mono', monospace; font-size: 11px;
+      border-radius: 2px; transition: all 0.15s;
+    }
+    .search-results-banner button:hover { border-color: var(--cyan); color: var(--cyan); }
+
+    /* ===== FOOTER ===== */
+    footer {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      margin-top: 40px;
+      padding: 40px 16px 24px;
+    }
+    .footer-inner {
+      max-width: 1400px; margin: 0 auto;
+    }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 32px; margin-bottom: 32px;
+    }
+    @media (max-width: 768px) {
+      .footer-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    .footer-logo {
+      font-family: 'Orbitron', monospace; font-weight: 900;
+      font-size: 1.3rem; letter-spacing: 2px; margin-bottom: 12px;
+    }
+    .footer-desc { font-size: 13px; color: var(--text2); line-height: 1.6; }
+
+    .footer-col h4 {
+      font-family: 'Orbitron', monospace;
+      font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--cyan); margin-bottom: 14px;
+    }
+    .footer-links { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .footer-links li a {
+      color: var(--text2); text-decoration: none; font-size: 13px;
+      transition: color 0.15s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .footer-links li a:hover { color: var(--cyan); }
+    .footer-links li a::before { content: '›'; color: var(--text2); }
+
+    .footer-bottom {
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+      display: flex; flex-wrap: wrap; gap: 12px;
+      align-items: center; justify-content: space-between;
+      font-family: 'Share Tech Mono', monospace; font-size: 11px; color: var(--text2);
+    }
+    .footer-bottom a { color: var(--text2); text-decoration: none; transition: color 0.15s; }
+    .footer-bottom a:hover { color: var(--cyan); }
+
+    .disclaimer {
+      background: rgba(255,230,0,0.05);
+      border: 1px solid rgba(255,230,0,0.15);
+      border-radius: 4px; padding: 12px 16px;
+      margin-bottom: 24px;
+      font-size: 12px; color: var(--text2); line-height: 1.5;
+    }
+    .disclaimer strong { color: var(--yellow); }
+
+    /* ===== TICKER ===== */
+    .ticker-wrap {
+      background: rgba(0,245,255,0.07);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 0; overflow: hidden;
+      position: relative;
+    }
+    .ticker-wrap::before, .ticker-wrap::after {
+      content: ''; position: absolute; top: 0; bottom: 0; width: 60px; z-index: 2;
+    }
+    .ticker-wrap::before { left: 0; background: linear-gradient(90deg, var(--bg2), transparent); }
+    .ticker-wrap::after  { right: 0; background: linear-gradient(-90deg, var(--bg2), transparent); }
+
+    .ticker-label {
+      position: absolute; left: 16px; top: 50%; transform: translateY(-50%); z-index: 3;
+      font-family: 'Orbitron', monospace; font-size: 9px; letter-spacing: 2px;
+      color: var(--pink); background: var(--bg2);
+      padding: 2px 8px; border: 1px solid var(--border2);
+    }
+    .ticker-track {
+      display: flex; gap: 0;
+      animation: tickerScroll 30s linear infinite;
+      white-space: nowrap;
+    }
+    @keyframes tickerScroll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    .ticker-item {
+      font-family: 'Share Tech Mono', monospace; font-size: 12px;
+      color: var(--text2); padding: 0 32px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .ticker-item .dot { color: var(--cyan); font-size: 6px; }
+
+    /* ===== EMPTY STATE ===== */
+    .empty-state {
+      text-align: center; padding: 60px 20px;
+      color: var(--text2); font-family: 'Share Tech Mono', monospace;
+    }
+    .empty-state .big { font-size: 40px; margin-bottom: 12px; }
+    .empty-state p { font-size: 13px; letter-spacing: 1px; }
+
+    /* ===== UTILITY ===== */
+    .hidden { display: none !important; }
+    a { color: inherit; }
+  </style>
+</head>
+<body>
+  <div id="grid-bg"></div>
+  <div id="scanlines"></div>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useEffect } = React;
+
+    /* ===================== DATA ===================== */
+    const SITES = [
+      {
+        id: 1, name: "FitGirl Repacks", url: "https://fitgirl-repacks.site",
+        icon: "🎮", desc: "The most popular repack site. Highly compressed games with selective installs.",
+        tags: ["repack"], cat: "Repacks", featured: true,
+        badge: "top", badgeLabel: "TOP RATED",
+        longDesc: "Legendary repack scene. Every major release covered fast with maximum compression.",
+        affLink: "https://fitgirl-repacks.site"
+      },
+      {
+        id: 2, name: "DODI Repacks", url: "https://dodi-repacks.site",
+        icon: "📦", desc: "Fast repack releases with all DLC. Great alternative to FitGirl.",
+        tags: ["repack"], cat: "Repacks", featured: true,
+        badge: "fast", badgeLabel: "FASTEST",
+        longDesc: "DODI consistently drops repacks faster than anyone with solid compression.",
+        affLink: "https://dodi-repacks.site"
+      },
+      {
+        id: 3, name: "GOG Unlocked", url: "https://gog-games.to",
+        icon: "🔓", desc: "DRM-free GOG releases. Clean installs, no cracks needed.",
+        tags: ["drm"], cat: "DRM-Free", featured: true,
+        badge: "safe", badgeLabel: "CLEAN",
+        longDesc: "Native DRM-free builds from GOG's own catalog. No launchers, no nonsense.",
+        affLink: "https://gog-games.to"
+      },
+      {
+        id: 4, name: "Steamunlocked", url: "https://steamunlocked.net",
+        icon: "🚂", desc: "Pre-installed Steam games. No setup required, just extract and play.",
+        tags: ["steam"], cat: "Steam", featured: true,
+        badge: "hot", badgeLabel: "POPULAR",
+        longDesc: "The go-to for beginners. Direct download Steam builds, pre-installed and ready.",
+        affLink: "https://steamunlocked.net"
+      },
+      {
+        id: 5, name: "Ocean of Games", url: "https://ocean-of-games.com",
+        icon: "🌊", desc: "Massive library of PC games with direct download links.",
+        tags: ["gen"], cat: "General", featured: false,
+        affLink: "https://ocean-of-games.com"
+      },
+      {
+        id: 6, name: "Skidrow Reloaded", url: "https://www.skidrowreloaded.com",
+        icon: "⚡", desc: "Classic scene releases. Cracked games from the biggest groups.",
+        tags: ["crack"], cat: "Cracks", featured: false,
+        affLink: "https://www.skidrowreloaded.com"
+      },
+      {
+        id: 7, name: "ElAmigos", url: "https://elamigos-games.net",
+        icon: "🎯", desc: "Spanish-language focused repacks. Great coverage of Spanish releases.",
+        tags: ["repack"], cat: "Repacks", featured: false,
+        affLink: "https://elamigos-games.net"
+      },
+      {
+        id: 8, name: "IGG Games", url: "https://igg-games.com",
+        icon: "🕹️", desc: "Large indie and AAA catalog with fast download speeds.",
+        tags: ["gen"], cat: "General", featured: false,
+        affLink: "https://igg-games.com"
+      },
+      {
+        id: 9, name: "Repack-Games", url: "https://repack-games.com",
+        icon: "🗜️", desc: "Dedicated repack aggregator with scene and P2P releases.",
+        tags: ["repack"], cat: "Repacks", featured: false,
+        affLink: "https://repack-games.com"
+      },
+      {
+        id: 10, name: "GOG Games", url: "https://gog-games.to",
+        icon: "💾", desc: "Huge archive of DRM-free classic and modern GOG titles.",
+        tags: ["drm"], cat: "DRM-Free", featured: false,
+        affLink: "https://gog-games.to"
+      },
+      {
+        id: 11, name: "Crohasit", url: "https://crohasit.com",
+        icon: "🌐", desc: "Regular updates of full-version PC games with working cracks.",
+        tags: ["crack"], cat: "Cracks", featured: false,
+        affLink: "https://crohasit.com"
+      },
+      {
+        id: 12, name: "Ovagames", url: "https://www.ovagames.com",
+        icon: "🥚", desc: "Long-running site with a huge back-catalog of PC releases.",
+        tags: ["gen"], cat: "General", featured: false,
+        affLink: "https://www.ovagames.com"
+      },
+    ];
+
+    const CATEGORIES = ["All", "Repacks", "DRM-Free", "Steam", "General", "Cracks"];
+
+    const NEWS = [
+      {
+        id: 1, cat: "SCENE NEWS",
+        title: "FitGirl Drops Elden Ring DLC Repack With Record Compression",
+        body: "The latest Shadow of the Erdtree repack comes in at just 14.3 GB from an original 24.8 GB install — FitGirl's compression tech continues to impress.",
+        date: "MAY 03, 2025", readTime: "2 MIN READ"
+      },
+      {
+        id: 2, cat: "GUIDE",
+        title: "How to Safely Download & Install Repacks in 2025",
+        body: "A step-by-step walkthrough on verifying file integrity, disabling antivirus temporarily, and running the DODI/FitGirl installers without issues.",
+        date: "APR 28, 2025", readTime: "5 MIN READ"
+      },
+      {
+        id: 3, cat: "DRM-FREE",
+        title: "GOG Adds 40 Titles to Their DRM-Free Library This Month",
+        body: "April was a huge month for DRM-free gaming. GOG welcomed 40 new titles including several AA gems that previously only had Steam releases.",
+        date: "APR 25, 2025", readTime: "3 MIN READ"
+      },
+      {
+        id: 4, cat: "SECURITY",
+        title: "Fake Repack Sites On the Rise — How to Spot Them",
+        body: "Malicious actors are cloning popular repack sites. We break down how to identify the real FitGirl, DODI, and Steamunlocked domains.",
+        date: "APR 19, 2025", readTime: "4 MIN READ"
+      },
+      {
+        id: 5, cat: "TOOLS",
+        title: "Best Free Tools to Verify Game Downloads (MD5, SHA256)",
+        body: "HashCheck, 7-Zip, and CrystalMark — our recommended toolkit to verify any game archive before you run the installer.",
+        date: "APR 12, 2025", readTime: "3 MIN READ"
+      },
+    ];
+
+    const TICKER_ITEMS = [
+      "FitGirl Repacks — Elden Ring DLC repack released",
+      "DODI — Helldivers 2 update repack v1.000.400 live",
+      "GOG Unlocked — Baldur's Gate 3 DRM-free now available",
+      "Steamunlocked — Cyberpunk 2077 2.1 pre-installed uploaded",
+      "New guide: How to use selective installs on FitGirl",
+      "Warning: Fake FitGirl domains detected — use official link only",
+      "Scene release: Dragon's Dogma 2 EMPRESS crack released",
+      "GOG added 8 new classics to DRM-free catalog",
+    ];
+
+    /* ===================== TAG HELPERS ===================== */
+    const tagClass = (t) => {
+      if (t === "repack") return "sc-tag tag-repack";
+      if (t === "drm")    return "sc-tag tag-drm";
+      if (t === "steam")  return "sc-tag tag-steam";
+      if (t === "crack")  return "sc-tag tag-crack";
+      return "sc-tag tag-gen";
+    };
+    const tagLabel = (t) => {
+      if (t === "repack") return "REPACK";
+      if (t === "drm")    return "DRM-FREE";
+      if (t === "steam")  return "STEAM";
+      if (t === "crack")  return "CRACK";
+      return "GENERAL";
+    };
+    const badgeClass = (b) => ({top:"fc-badge badge-top", safe:"fc-badge badge-safe", fast:"fc-badge badge-fast", hot:"fc-badge badge-hot"}[b] || "fc-badge badge-top");
+
+    /* ===================== AD SLOT COMPONENT ===================== */
+    const AdSlot = ({ cls, label }) => (
+      <div className={`ad-slot ${cls}`}>
+        <span>{label || "728×90 — Google AdSense"}</span>
+      </div>
+    );
+
+    /* ===================== TICKER ===================== */
+    const Ticker = () => {
+      const doubled = [...TICKER_ITEMS, ...TICKER_ITEMS];
+      return (
+        <div className="ticker-wrap">
+          <div className="ticker-label">LATEST</div>
+          <div className="ticker-track" style={{paddingLeft: 120}}>
+            {doubled.map((item, i) => (
+              <span key={i} className="ticker-item">
+                <span className="dot">◆</span>{item}
+              </span>
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    /* ===================== FEATURED CARD ===================== */
+    const FeaturedCard = ({ site }) => (
+      <a href={site.affLink} target="_blank" rel="noopener noreferrer" className="featured-card">
+        <div className={badgeClass(site.badge)}>
+          <span>★</span> {site.badgeLabel}
+        </div>
+        <div className="fc-name">{site.name}</div>
+        <div className="fc-desc">{site.longDesc}</div>
+        <div className="fc-meta">
+          {site.tags.map(t => (
+            <span key={t} className="fc-tag">{tagLabel(t)}</span>
+          ))}
+          <span className="fc-visit">VISIT →</span>
+        </div>
+        <div className="fc-corner"></div>
+      </a>
+    );
+
+    /* ===================== SITE CARD ===================== */
+    const SiteCard = ({ site }) => (
+      <a href={site.affLink} target="_blank" rel="noopener noreferrer" className="site-card">
+        <div className="sc-icon">{site.icon}</div>
+        <div className="sc-head">
+          <div className="sc-name">{site.name}</div>
+          <span className="sc-arrow">›</span>
+        </div>
+        <div className="sc-desc">{site.desc}</div>
+        <div className="sc-tags">
+          {site.tags.map(t => (
+            <span key={t} className={tagClass(t)}>{tagLabel(t)}</span>
+          ))}
+        </div>
+      </a>
+    );
+
+    /* ===================== NEWS CARD ===================== */
+    const NewsCard = ({ article }) => (
+      <div className="news-card">
+        <div className="nc-cat">◆ {article.cat}</div>
+        <div className="nc-title">{article.title}</div>
+        <div className="nc-body">{article.body}</div>
+        <div className="nc-foot">
+          <span className="nc-date">🕐 {article.date}</span>
+          <span className="nc-read">{article.readTime} ›</span>
+        </div>
+      </div>
+    );
+
+    /* ===================== SIDEBAR ===================== */
+    const Sidebar = () => (
+      <aside className="sidebar">
+        {/* Skyscraper Ad */}
+        <div className="sidebar-widget">
+          <div className="sw-header">Advertisement</div>
+          <div className="sw-body" style={{padding: '10px'}}>
+            <AdSlot cls="ad-sky" label="160×600 AdSense" />
+          </div>
+        </div>
+
+        {/* Stats Widget */}
+        <div className="sidebar-widget">
+          <div className="sw-header">◆ Site Stats</div>
+          <div className="sw-body">
+            <div className="stat-row">
+              <span className="stat-label">Sites Listed</span>
+              <span className="stat-val">12</span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-label">Categories</span>
+              <span className="stat-val">6</span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-label">Last Updated</span>
+              <span className="stat-val" style={{color:'var(--green)'}}>MAY 2025</span>
+            </div>
+            <div className="stat-row">
+              <span className="stat-label">
+                <span className="online-dot"></span>Online Now
+              </span>
+              <span className="stat-val" style={{color:'var(--green)'}}>1,247</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Top Picks */}
+        <div className="sidebar-widget">
+          <div className="sw-header">◆ Top Picks</div>
+          <div className="sw-body" style={{padding:'10px'}}>
+            <div className="top-pick">
+              {SITES.slice(0,6).map((s, i) => (
+                <a key={s.id} href={s.affLink} target="_blank" rel="noopener noreferrer" className="tp-item">
+                  <span className="tp-rank">#{i+1}</span>
+                  <span className="tp-name">{s.name}</span>
+                  <span className="tp-arrow">›</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Square Ad */}
+        <div className="sidebar-widget">
+          <div className="sw-header">Advertisement</div>
+          <div className="sw-body" style={{padding:'10px'}}>
+            <AdSlot cls="ad-sq" label="150×150 AdSense" />
+          </div>
+        </div>
+      </aside>
+    );
+
+    /* ===================== MAIN APP ===================== */
+    const App = () => {
+      const [activeCat, setActiveCat] = useState("All");
+      const [searchQuery, setSearchQuery] = useState("");
+
+      const catCounts = useMemo(() => {
+        const c = { All: SITES.length };
+        CATEGORIES.slice(1).forEach(cat => {
+          c[cat] = SITES.filter(s => s.cat === cat).length;
+        });
+        return c;
+      }, []);
+
+      const filteredSites = useMemo(() => {
+        let results = SITES;
+        if (activeCat !== "All") results = results.filter(s => s.cat === activeCat);
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          results = results.filter(s =>
+            s.name.toLowerCase().includes(q) ||
+            s.desc.toLowerCase().includes(q) ||
+            s.tags.some(t => t.includes(q))
+          );
+        }
+        return results;
+      }, [activeCat, searchQuery]);
+
+      const featuredSites = useMemo(() =>
+        SITES.filter(s => s.featured), []);
+
+      const showFeatured = activeCat === "All" && !searchQuery.trim();
+      const nonFeaturedInFilter = filteredSites.filter(s => !s.featured || activeCat !== "All" || searchQuery.trim());
+      const gridSites = showFeatured ? filteredSites.filter(s => !s.featured) : filteredSites;
+
+      const clearSearch = () => { setSearchQuery(""); };
+
+      return (
+        <div>
+          {/* TOP BANNER AD */}
+          <div className="top-banner-ad">
+            <AdSlot cls="ad-banner-728" label="728×90 — Google AdSense Banner" />
+          </div>
+
+          {/* HEADER */}
+          <header>
+            <div className="header-inner">
+              <div className="logo" data-text="NEXUS GAMES">
+                <span className="nx">NEXUS</span>
+                <span style={{color:'rgba(200,216,232,0.3)', margin:'0 2px'}}>/</span>
+                <span className="gm">GAMES</span>
+              </div>
+              <div className="search-wrap">
+                <input
+                  type="text"
+                  placeholder="Search sites, categories..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                />
+                <span className="search-icon">⌕</span>
+              </div>
+              <div className="header-actions">
+                <a href="https://ko-fi.com" target="_blank" rel="noopener noreferrer" className="btn btn-kofi">
+                  ☕ Ko-fi
+                </a>
+                <a href="https://patreon.com" target="_blank" rel="noopener noreferrer" className="btn btn-patreon">
+                  🔱 Patreon
+                </a>
+              </div>
+            </div>
+          </header>
+
+          {/* CATEGORY NAV */}
+          <nav className="cat-nav">
+            <div className="cat-nav-inner">
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat}
+                  className={`cat-btn${activeCat === cat ? " active" : ""}`}
+                  onClick={() => { setActiveCat(cat); setSearchQuery(""); }}
+                >
+                  {cat}
+                  <span className="cat-count">{catCounts[cat]}</span>
+                </button>
+              ))}
+            </div>
+          </nav>
+
+          {/* TICKER */}
+          <Ticker />
+
+          {/* MAIN LAYOUT */}
+          <div className="main-layout">
+            {/* CONTENT */}
+            <main>
+              {/* Search Result Banner */}
+              {searchQuery.trim() && (
+                <div className="search-results-banner">
+                  <span>⌕</span>
+                  <span>Found <strong style={{color:'var(--cyan)'}}>{filteredSites.length}</strong> result{filteredSites.length !== 1 ? 's' : ''} for "<strong style={{color:'#fff'}}>{searchQuery}</strong>"</span>
+                  <button onClick={clearSearch}>✕ Clear</button>
+                </div>
+              )}
+
+              {/* FEATURED */}
+              {showFeatured && (
+                <>
+                  <div className="section-header">
+                    <span className="section-title">Featured Sites</span>
+                    <span className="section-line"></span>
+                    <span className="section-tag">TOP PICKS</span>
+                  </div>
+                  <div className="featured-grid">
+                    {featuredSites.map(s => <FeaturedCard key={s.id} site={s} />)}
+                  </div>
+                </>
+              )}
+
+              {/* ALL SITES GRID */}
+              <div className="section-header">
+                <span className="section-title">
+                  {activeCat === "All" ? "All Sites" : activeCat}
+                </span>
+                <span className="section-line"></span>
+                <span className="section-tag">{gridSites.length} SITES</span>
+              </div>
+
+              {gridSites.length > 0 ? (
+                <div className="sites-grid">
+                  {gridSites.map(s => <SiteCard key={s.id} site={s} />)}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <div className="big">◈</div>
+                  <p>No sites found. Try a different search or category.</p>
+                </div>
+              )}
+
+              {/* MID AD */}
+              {showFeatured && (
+                <div className="mid-ad-wrap">
+                  <AdSlot cls="ad-mid" label="468×60 — Google AdSense Mid-Content" />
+                </div>
+              )}
+
+              {/* NEWS */}
+              {showFeatured && (
+                <>
+                  <div className="section-header">
+                    <span className="section-title">News & Updates</span>
+                    <span className="section-line"></span>
+                    <span className="section-tag">MAY 2025</span>
+                  </div>
+                  <div className="news-grid">
+                    {NEWS.map(a => <NewsCard key={a.id} article={a} />)}
+                  </div>
+                </>
+              )}
+            </main>
+
+            {/* SIDEBAR */}
+            <Sidebar />
+          </div>
+
+          {/* FOOTER */}
+          <footer>
+            <div className="footer-inner">
+              <div className="disclaimer">
+                <strong>⚠ Disclaimer:</strong> NexusGames is a directory and linking service. We do not host, upload, or distribute any game files. All links point to third-party websites. Users are responsible for complying with copyright laws in their jurisdiction.
+              </div>
+              <div className="footer-grid">
+                <div>
+                  <div className="footer-logo">
+                    <span style={{color:'var(--cyan)'}}>NEXUS</span>
+                    <span style={{color:'rgba(200,216,232,0.3)', margin:'0 4px'}}>/</span>
+                    <span style={{color:'var(--pink)'}}>GAMES</span>
+                  </div>
+                  <p className="footer-desc">
+                    Your ultimate hub for free PC games. We index the best repack sites, DRM-free libraries, and scene releases so you don't have to search the whole web.
+                  </p>
+                </div>
+                <div className="footer-col">
+                  <h4>Legal</h4>
+                  <ul className="footer-links">
+                    <li><a href="#">Privacy Policy</a></li>
+                    <li><a href="#">DMCA Notice</a></li>
+                    <li><a href="#">Terms of Use</a></li>
+                    <li><a href="#">Cookie Policy</a></li>
+                  </ul>
+                </div>
+                <div className="footer-col">
+                  <h4>Site</h4>
+                  <ul className="footer-links">
+                    <li><a href="#">Contact Us</a></li>
+                    <li><a href="#">Advertise</a></li>
+                    <li><a href="#">Affiliate Program</a></li>
+                    <li><a href="#">Submit a Site</a></li>
+                  </ul>
+                </div>
+                <div className="footer-col">
+                  <h4>Support Us</h4>
+                  <ul className="footer-links">
+                    <li><a href="https://ko-fi.com" target="_blank" rel="noopener noreferrer">☕ Ko-fi Donation</a></li>
+                    <li><a href="https://patreon.com" target="_blank" rel="noopener noreferrer">🔱 Patreon</a></li>
+                    <li><a href="#">RSS Feed</a></li>
+                    <li><a href="#">Newsletter</a></li>
+                  </ul>
+                </div>
+              </div>
+              <div className="footer-bottom">
+                <span>© 2025 NexusGames. All rights reserved.</span>
+                <div style={{display:'flex', gap:'16px'}}>
+                  <a href="#">Privacy</a>
+                  <a href="#">DMCA</a>
+                  <a href="#">Contact</a>
+                  <a href="#">Advertise</a>
+                  <a href="#">Affiliate</a>
+                </div>
+                <span style={{color:'rgba(0,245,255,0.4)', fontFamily:'Share Tech Mono, monospace'}}>
+                  BUILD_v2.0.0 // 2025
+                </span>
+              </div>
+            </div>
+          </footer>
+        </div>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
