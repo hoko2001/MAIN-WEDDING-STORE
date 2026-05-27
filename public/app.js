@@ -92,22 +92,42 @@ let allRequests     = [];
 let currentPackage  = 'all';
 let currentStatus   = 'all';
 let selectedRating  = 0;
+let sortPopular     = false;
+let favorites       = JSON.parse(localStorage.getItem('weddingFavorites') || '[]');
+let lightboxIndex   = 0;
+let lightboxList    = [];
+let selectedRequestIds = new Set();
+let calYear, calMonth;
+let lastTrackingCode = '';
+let deferredPwaPrompt = null;
 
 // ═══════════════════════════════════════════════════════════════════
 //  Init
 // ═══════════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
+  const now = new Date();
+  calYear = now.getFullYear();
+  calMonth = now.getMonth();
+
   loadInvitations();
   loadReviews();
   loadAnalyticsBanner();
   setupEventListeners();
   setupStarPicker();
+  updateFavFab();
+  checkTrackRoute();
+  registerServiceWorker();
+  setupPwaInstall();
 });
 
 function setupEventListeners() {
-  document.getElementById('searchInput').addEventListener('input', e => applyFilters());
+  document.getElementById('searchInput').addEventListener('input', () => applyFilters());
   document.getElementById('requestForm').addEventListener('submit', submitRequest);
   document.getElementById('reviewForm').addEventListener('submit', submitReview);
+  // Close lightbox on backdrop click
+  document.getElementById('lightbox').addEventListener('click', e => {
+    if (e.target === document.getElementById('lightbox')) closeLightbox();
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -129,8 +149,11 @@ async function loadAnalyticsBanner() {
 // ═══════════════════════════════════════════════════════════════════
 async function loadInvitations() {
   try {
-    const r = await fetch('/api/invitations');
+    const url = sortPopular ? '/api/invitations?sort=popular' : '/api/invitations';
+    const r = await fetch(url);
     allInvitations = await r.json();
+    // Build lightbox list
+    lightboxList = allInvitations.filter(i => i.image_url);
     applyFilters();
     populateInvitationSelect();
     populateReviewTemplateSelect();
@@ -149,9 +172,16 @@ function applyFilters() {
 
 function filterByPackage(pkg, btn) {
   currentPackage = pkg;
-  document.querySelectorAll('.filter-row .filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.filter-row .filter-btn:not(.sort-btn)').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   applyFilters();
+}
+
+// Feature #12: toggle popular sort
+function togglePopularSort(btn) {
+  sortPopular = !sortPopular;
+  btn.classList.toggle('active', sortPopular);
+  loadInvitations();
 }
 
 const PKG_BADGE = { Basic: 'badge-basic', Premium: 'badge-premium', Luxury: 'badge-luxury' };
@@ -165,23 +195,32 @@ function renderGallery(invitations) {
     count.textContent = '0 templates available';
     return;
   }
-  invitations.forEach(inv => {
-    const id    = inv._id || inv.id;
-    const price = inv.price ? `<span class="price-tag">${Number(inv.price).toLocaleString()} DA</span>` : '';
-    const badge = `<span class="pkg-badge ${PKG_BADGE[inv.package]||''}">${inv.package||'Basic'}</span>`;
-    const card  = document.createElement('div');
+  invitations.forEach((inv, idx) => {
+    const id       = inv._id || inv.id;
+    const price    = inv.price ? `<span class="price-tag">${Number(inv.price).toLocaleString()} DA</span>` : '';
+    const badge    = `<span class="pkg-badge ${PKG_BADGE[inv.package]||''}">${inv.package||'Basic'}</span>`;
+    const isFav    = favorites.includes(id);
+    const popular  = inv.order_count > 0 ? `<span class="popular-badge">🔥 ${inv.order_count} orders</span>` : '';
+    const card     = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `
-      <div class="card-image">
-        <img src="${inv.image_url||''}" alt="${inv.name}" onerror="this.style.display='none'">
-        <div class="card-badges">${badge}</div>
+      <div class="card-image" onclick="openLightbox('${id}')">
+        <img src="${inv.image_url||''}" alt="${inv.name}" loading="lazy" onerror="this.style.display='none'">
+        <div class="card-badges">${badge}${popular}</div>
+        <div class="lightbox-hint">🔍 View</div>
       </div>
       <div class="card-content">
-        <h3 class="card-title">${inv.name}</h3>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <h3 class="card-title">${inv.name}</h3>
+          <button class="fav-heart ${isFav?'fav-active':''}" onclick="toggleFavorite(event,'${id}')" title="Save to favorites">♥</button>
+        </div>
         <p class="card-description">${inv.description||''}</p>
         <div class="card-footer">
           ${price}
-          <button class="card-button" onclick="openRequestModal('${id}')">Select</button>
+          <div style="display:flex;gap:.5rem">
+            <button class="sample-btn" onclick="openSampleModal('${id}')">👁 Sample</button>
+            <button class="card-button" onclick="openRequestModal('${id}')">Select</button>
+          </div>
         </div>
       </div>`;
     grid.appendChild(card);
@@ -226,12 +265,112 @@ function updatePriceSummary() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+//  Feature #4 — Lightbox
+// ═══════════════════════════════════════════════════════════════════
+function openLightbox(invId) {
+  const idx = lightboxList.findIndex(i => (i._id||i.id) === invId);
+  if (idx === -1) return;
+  lightboxIndex = idx;
+  showLightboxAt(lightboxIndex);
+  document.getElementById('lightbox').classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function showLightboxAt(idx) {
+  const inv = lightboxList[idx];
+  if (!inv) return;
+  document.getElementById('lightboxImg').src = inv.image_url;
+  document.getElementById('lightboxCaption').textContent = `${inv.name} — ${(inv.price||0).toLocaleString()} DA`;
+}
+
+function lightboxNav(dir) {
+  lightboxIndex = (lightboxIndex + dir + lightboxList.length) % lightboxList.length;
+  showLightboxAt(lightboxIndex);
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('active');
+  document.body.style.overflow = 'auto';
+}
+
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('lightbox').classList.contains('active')) return;
+  if (e.key === 'ArrowRight') lightboxNav(1);
+  if (e.key === 'ArrowLeft')  lightboxNav(-1);
+  if (e.key === 'Escape')     closeLightbox();
+});
+
+// ═══════════════════════════════════════════════════════════════════
+//  Feature #3 — Favorites
+// ═══════════════════════════════════════════════════════════════════
+function toggleFavorite(e, id) {
+  e.stopPropagation();
+  const btn = e.currentTarget;
+  if (favorites.includes(id)) {
+    favorites = favorites.filter(f => f !== id);
+    btn.classList.remove('fav-active');
+  } else {
+    favorites.push(id);
+    btn.classList.add('fav-active');
+  }
+  localStorage.setItem('weddingFavorites', JSON.stringify(favorites));
+  updateFavFab();
+}
+
+function updateFavFab() {
+  const fab = document.getElementById('favFab');
+  document.getElementById('favCount').textContent = favorites.length;
+  fab.style.display = favorites.length > 0 ? 'flex' : 'none';
+}
+
+function openFavoritesPanel() {
+  const list  = document.getElementById('favList');
+  const favInvs = allInvitations.filter(i => favorites.includes(i._id||i.id));
+  if (!favInvs.length) { list.innerHTML = '<p style="padding:1rem;color:#94a3b8">No favorites yet</p>'; }
+  else {
+    list.innerHTML = favInvs.map(inv => {
+      const id = inv._id||inv.id;
+      return `<div class="fav-item">
+        <img src="${inv.image_url||''}" onerror="this.style.display='none'" style="width:56px;height:42px;object-fit:cover;border-radius:6px;flex-shrink:0">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:.9rem">${inv.name}</div>
+          <div style="color:#ec4899;font-size:.85rem">${(inv.price||0).toLocaleString()} DA</div>
+        </div>
+        <button class="card-button" style="padding:.4rem .8rem;font-size:.8rem" onclick="openRequestModal('${id}');closeFavoritesPanel()">Order</button>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('favPanel').classList.add('active');
+}
+
+function closeFavoritesPanel() {
+  document.getElementById('favPanel').classList.remove('active');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Feature #15 — Sample preview
+// ═══════════════════════════════════════════════════════════════════
+async function openSampleModal(invId) {
+  const inv = allInvitations.find(i => (i._id||i.id) === invId);
+  if (!inv) return;
+  document.getElementById('sampleModalName').textContent = inv.name;
+  document.getElementById('sampleImg').src = inv.image_url || '';
+  document.getElementById('sampleOrderBtn').onclick = () => { closeSampleModal(); openRequestModal(invId); };
+  document.getElementById('sampleModal').classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeSampleModal() {
+  document.getElementById('sampleModal').classList.remove('active');
+  document.body.style.overflow = 'auto';
+}
+
+// ═══════════════════════════════════════════════════════════════════
 //  Request modal
 // ═══════════════════════════════════════════════════════════════════
 function openRequestModal(invId) {
   document.getElementById('invitationSelect').value = invId;
   updatePriceSummary();
-  // Show template info bar
   const inv = allInvitations.find(i => (i._id||i.id) === invId);
   if (inv) {
     document.getElementById('selectedTemplateInfo').innerHTML =
@@ -253,6 +392,14 @@ function closeRequestModal() {
 function closeSuccessModal() {
   document.getElementById('successModal').classList.remove('active');
   document.body.style.overflow = 'auto';
+}
+
+function copyTrackingCode() {
+  navigator.clipboard.writeText(lastTrackingCode).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => btn.textContent = '📋 Copy Code', 2000);
+  });
 }
 
 async function submitRequest(e) {
@@ -277,16 +424,83 @@ async function submitRequest(e) {
     const d = await r.json();
     if (r.ok) {
       closeRequestModal();
+      // Feature #5: show tracking code
+      lastTrackingCode = d.tracking_id || '';
+      if (d.tracking_id) {
+        document.getElementById('trackingInfo').style.display = 'block';
+        document.getElementById('trackingCode').textContent = d.tracking_id;
+      }
       document.getElementById('successModal').classList.add('active');
       document.body.style.overflow = 'hidden';
-      setTimeout(closeSuccessModal, 3500);
+      setTimeout(closeSuccessModal, 8000);
       loadAnalyticsBanner();
+      loadInvitations(); // refresh order counts
     } else { alert('Error: ' + d.error); }
   } catch { alert('Error submitting request'); }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Reviews (Feature 4)
+//  Feature #5 — Order Tracker (public)
+// ═══════════════════════════════════════════════════════════════════
+function checkTrackRoute() {
+  const match = window.location.pathname.match(/^\/track\/([A-Z0-9]+)$/i);
+  if (match) {
+    openTrackModal();
+    document.getElementById('trackInput').value = match[1].toUpperCase();
+    doTrack();
+  }
+}
+
+function openTrackModal() {
+  document.getElementById('trackModal').classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeTrackModal() {
+  document.getElementById('trackModal').classList.remove('active');
+  document.getElementById('trackResult').style.display = 'none';
+  document.getElementById('trackInput').value = '';
+  document.body.style.overflow = 'auto';
+}
+
+async function doTrack() {
+  const code = document.getElementById('trackInput').value.trim().toUpperCase();
+  if (!code) { alert('Enter a tracking code'); return; }
+  const resultEl = document.getElementById('trackResult');
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = '<p style="color:#94a3b8">Searching...</p>';
+  try {
+    const r = await fetch(`/api/track/${code}`);
+    if (!r.ok) {
+      resultEl.innerHTML = '<p style="color:#ef4444">❌ Order not found. Check the code and try again.</p>';
+      return;
+    }
+    const d = await r.json();
+    const steps = ['pending','in_progress','completed'];
+    const stepLabels = { pending:'Received', in_progress:'In Progress', completed:'Ready!' };
+    const statusIdx = steps.indexOf(d.status);
+    resultEl.innerHTML = `
+      <div class="track-card">
+        <div class="track-name">👰 ${d.first_name}'s Order</div>
+        <div class="track-template">🎨 ${d.invitation_name}</div>
+        <div class="track-date">💍 Wedding: ${d.wedding_date}</div>
+        <div class="track-steps">
+          ${steps.map((s, i) => `
+            <div class="track-step ${i <= statusIdx ? 'done' : ''} ${d.status === s ? 'current' : ''}">
+              <div class="track-dot"></div>
+              <div class="track-step-label">${stepLabels[s]}</div>
+            </div>
+          `).join('<div class="track-line"></div>')}
+        </div>
+        <div class="track-status status-${d.status}">${(d.status||'').replace('_',' ')}</div>
+      </div>`;
+  } catch {
+    resultEl.innerHTML = '<p style="color:#ef4444">Error checking order. Try again.</p>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Reviews (Feature 4 original)
 // ═══════════════════════════════════════════════════════════════════
 async function loadReviews() {
   try {
@@ -374,6 +588,7 @@ function switchTab(name, btn) {
   if (name==='templates') loadAdminTemplates();
   if (name==='analytics') loadAdminAnalytics();
   if (name==='reviews')   loadAdminReviews();
+  if (name==='calendar')  renderCalendar();
 }
 
 // ── Requests tab ──────────────────────────────────────────────────
@@ -381,6 +596,8 @@ function filterRequests(status, btn) {
   currentStatus = status;
   document.querySelectorAll('.status-filter .filter-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
+  selectedRequestIds.clear();
+  updateBulkBar();
   renderRequests();
 }
 
@@ -392,9 +609,13 @@ function renderRequests() {
   el.innerHTML = list.map(req => {
     const id = req._id||req.id;
     const opts = statusOpts.map(s=>`<option value="${s}" ${req.status===s?'selected':''}>${s.replace('_',' ')}</option>`).join('');
+    const isChecked = selectedRequestIds.has(id);
+    const waLink = `https://wa.me/${req.phone_number.replace(/\D/g,'')}?text=${encodeURIComponent(`Hello ${req.first_name}! Your invitation "${req.invitation_name}" update:`)}`;
     return `
-    <div class="request-item">
+    <div class="request-item ${isChecked?'request-selected':''}">
       <div class="request-header">
+        <!-- Feature #9: checkbox -->
+        <input type="checkbox" class="bulk-checkbox" ${isChecked?'checked':''} onchange="toggleBulkSelect('${id}',this.checked)" title="Select for bulk action">
         <h3>${req.first_name} ${req.last_name}</h3>
         <span class="status-chip status-${req.status}">${req.status.replace('_',' ')}</span>
       </div>
@@ -404,15 +625,81 @@ function renderRequests() {
         <div><strong>🎨</strong> ${req.invitation_name}</div>
         <div><strong>💰</strong> ${(req.price||0).toLocaleString()} DA</div>
         <div><strong>📅</strong> ${new Date(req.created_at).toLocaleDateString()}</div>
+        <div><strong>🔗</strong> ${req.tracking_id||'—'}</div>
         ${req.notes?`<div style="grid-column:1/-1"><strong>📝</strong> ${req.notes}</div>`:''}
+      </div>
+      <!-- Feature #10: Admin notes -->
+      <div class="admin-note-wrap">
+        <textarea class="admin-note-input" id="anote-${id}" placeholder="Internal notes (not visible to client)...">${req.admin_notes||''}</textarea>
+        <button class="small-btn" onclick="saveAdminNote('${id}')">💾 Save Note</button>
       </div>
       <div class="request-status">
         <select id="status-${id}">${opts}</select>
         <button onclick="updateRequestStatus('${id}')">Update</button>
+        <!-- Feature #8: WhatsApp quick reply -->
+        <a href="${waLink}" target="_blank" class="small-btn wa-btn">💬 WhatsApp</a>
         <button class="danger-btn" onclick="deleteRequest('${id}')">Delete</button>
       </div>
     </div>`;
   }).join('');
+}
+
+// Feature #9: bulk select
+function toggleBulkSelect(id, checked) {
+  if (checked) selectedRequestIds.add(id);
+  else selectedRequestIds.delete(id);
+  updateBulkBar();
+  // Update row highlight
+  document.querySelectorAll('.request-item').forEach(el => {
+    const cb = el.querySelector('.bulk-checkbox');
+    if (cb) el.classList.toggle('request-selected', cb.checked);
+  });
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  const n = selectedRequestIds.size;
+  bar.style.display = n > 0 ? 'flex' : 'none';
+  document.getElementById('bulkCount').textContent = `${n} selected`;
+}
+
+async function applyBulkStatus() {
+  const status = document.getElementById('bulkStatusSel').value;
+  const ids = [...selectedRequestIds];
+  if (!ids.length) return;
+  if (!confirm(`Set ${ids.length} requests to "${status}"?`)) return;
+  try {
+    const r = await fetch(`/api/admin/requests/bulk?key=${encodeURIComponent(adminKey)}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ids, status })
+    });
+    if (r.ok) { selectedRequestIds.clear(); updateBulkBar(); loadAdminRequests(); loadAnalyticsBanner(); }
+    else alert('Bulk update failed');
+  } catch { alert('Error'); }
+}
+
+function clearBulkSelection() {
+  selectedRequestIds.clear();
+  updateBulkBar();
+  renderRequests();
+}
+
+// Feature #10: save admin note
+async function saveAdminNote(id) {
+  const note = document.getElementById(`anote-${id}`).value;
+  try {
+    const r = await fetch(`/api/admin/requests/${id}?key=${encodeURIComponent(adminKey)}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ admin_notes: note, status: allRequests.find(r=>(r._id||r.id)===id)?.status })
+    });
+    if (r.ok) {
+      const btn = document.querySelector(`#anote-${id} + button`);
+      if (btn) { btn.textContent = '✅ Saved'; setTimeout(()=>btn.textContent='💾 Save Note', 2000); }
+      // Update local state
+      const req = allRequests.find(r=>(r._id||r.id)===id);
+      if (req) req.admin_notes = note;
+    }
+  } catch { alert('Error saving note'); }
 }
 
 async function loadAdminRequests() {
@@ -452,7 +739,7 @@ async function exportCSV() {
   } catch { alert('Error exporting'); }
 }
 
-// ── Templates tab (Feature 2 — image upload) ──────────────────────
+// ── Templates tab ──────────────────────────────────────────────────
 async function loadAdminTemplates() {
   try {
     const r    = await fetch('/api/invitations');
@@ -464,7 +751,8 @@ async function loadAdminTemplates() {
       <div class="template-admin-item">
         <img src="${t.image_url||''}" onerror="this.style.display='none'" style="width:80px;height:60px;object-fit:cover;border-radius:8px;flex-shrink:0">
         <div style="flex:1;min-width:0">
-          <strong>${t.name}</strong> <span class="pkg-badge ${PKG_BADGE[t.package]||''}">${t.package}</span><br>
+          <strong>${t.name}</strong> <span class="pkg-badge ${PKG_BADGE[t.package]||''}">${t.package}</span>
+          <span style="font-size:.75rem;color:#94a3b8;margin-left:.5rem">🔥 ${t.order_count||0} orders</span><br>
           <small style="color:#64748b">${t.description||''}</small><br>
           <span style="color:#ec4899;font-weight:700">${(t.price||0).toLocaleString()} DA</span>
         </div>
@@ -501,7 +789,6 @@ async function saveTemplate() {
   const editId = document.getElementById('editTemplateId').value;
   let imageUrl = document.getElementById('tplImageUrl').value;
 
-  // Handle file upload first if a file was chosen
   const fileInput = document.getElementById('tplImageFile');
   if (fileInput.files[0]) {
     document.getElementById('uploadProgress').style.display='block';
@@ -543,7 +830,7 @@ async function deleteTemplate(id) {
   } catch { alert('Error'); }
 }
 
-// ── Analytics tab (Feature 5) ─────────────────────────────────────
+// ── Analytics tab ─────────────────────────────────────────────────
 async function loadAdminAnalytics() {
   try {
     const r = await fetch('/api/analytics/summary');
@@ -557,7 +844,6 @@ async function loadAdminAnalytics() {
       <div class="analytics-card revenue"><div class="analytics-num">${(d.revenue||0).toLocaleString()} DA</div><div class="analytics-label">Total Revenue</div></div>
     `;
 
-    // Simple bar chart (no library needed)
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const monthly = d.monthly||[];
     const maxCount = Math.max(...monthly.map(m=>m.count),1);
@@ -578,7 +864,6 @@ async function loadAdminAnalytics() {
       ctx.fillText(m.count,x+barW/2,y-5);
     });
 
-    // Top templates horizontal bars
     const top = d.topTemplates||[];
     const maxT = Math.max(...top.map(t=>t.count),1);
     document.getElementById('topTemplatesChart').innerHTML = top.map(t=>`
@@ -591,6 +876,48 @@ async function loadAdminAnalytics() {
         </div>
       </div>`).join('');
   } catch(e) { console.error(e); }
+}
+
+// ── Feature #11: Calendar tab ─────────────────────────────────────
+function calPrev() { calMonth--; if (calMonth < 0) { calMonth=11; calYear--; } renderCalendar(); }
+function calNext() { calMonth++; if (calMonth > 11) { calMonth=0;  calYear++; } renderCalendar(); }
+
+function renderCalendar() {
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  document.getElementById('calTitle').textContent = `${monthNames[calMonth]} ${calYear}`;
+
+  // Map requests to wedding date
+  const dateMap = {};
+  allRequests.forEach(req => {
+    if (!req.wedding_date) return;
+    const key = req.wedding_date; // YYYY-MM-DD
+    if (!dateMap[key]) dateMap[key] = [];
+    dateMap[key].push(req);
+  });
+
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const today = new Date();
+
+  let html = '<div class="cal-weekdays">';
+  ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => html += `<div class="cal-wd">${d}</div>`);
+  html += '</div><div class="cal-days">';
+
+  // Empty cells before first day
+  for (let i=0; i<firstDay; i++) html += '<div class="cal-day cal-empty"></div>';
+
+  for (let d=1; d<=daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dayReqs = dateMap[dateStr] || [];
+    const isToday = today.getFullYear()===calYear && today.getMonth()===calMonth && today.getDate()===d;
+    const dots = dayReqs.map(r=>`<span class="cal-dot dot-${r.status}" title="${r.first_name} ${r.last_name} — ${r.invitation_name}"></span>`).join('');
+    html += `<div class="cal-day ${isToday?'cal-today':''} ${dayReqs.length?'cal-has-events':''}">
+      <span class="cal-day-num">${d}</span>
+      <div class="cal-dots">${dots}</div>
+    </div>`;
+  }
+  html += '</div>';
+  document.getElementById('calGrid').innerHTML = html;
 }
 
 // ── Reviews moderation tab ────────────────────────────────────────
@@ -640,10 +967,67 @@ async function deleteReview(id) {
   } catch { alert('Error'); }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+//  Feature #17 — Lazy-load via IntersectionObserver
+// ═══════════════════════════════════════════════════════════════════
+function setupLazyLoad() {
+  if (!('IntersectionObserver' in window)) return;
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const img = entry.target;
+        if (img.dataset.src) {
+          img.src = img.dataset.src;
+          img.removeAttribute('data-src');
+          img.classList.add('img-loaded');
+        }
+        observer.unobserve(img);
+      }
+    });
+  }, { rootMargin: '100px' });
+  document.querySelectorAll('img[loading="lazy"]').forEach(img => observer.observe(img));
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Feature #20 — PWA / Service Worker
+// ═══════════════════════════════════════════════════════════════════
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+}
+
+function setupPwaInstall() {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPwaPrompt = e;
+    document.getElementById('pwaInstallBanner').style.display = 'flex';
+  });
+  window.addEventListener('appinstalled', () => {
+    document.getElementById('pwaInstallBanner').style.display = 'none';
+    deferredPwaPrompt = null;
+  });
+}
+
+function installPWA() {
+  if (!deferredPwaPrompt) return;
+  deferredPwaPrompt.prompt();
+  deferredPwaPrompt.userChoice.then(() => {
+    deferredPwaPrompt = null;
+    document.getElementById('pwaInstallBanner').style.display = 'none';
+  });
+}
+
+function dismissPWA() {
+  document.getElementById('pwaInstallBanner').style.display = 'none';
+}
+
 // ── Close modals on backdrop click ───────────────────────────────
 document.addEventListener('click', e => {
   if (e.target===document.getElementById('requestModal')) closeRequestModal();
   if (e.target===document.getElementById('successModal')) closeSuccessModal();
   if (e.target===document.getElementById('adminModal'))   closeAdminPanel();
   if (e.target===document.getElementById('reviewModal'))  closeReviewModal();
+  if (e.target===document.getElementById('trackModal'))   closeTrackModal();
+  if (e.target===document.getElementById('sampleModal'))  closeSampleModal();
 });

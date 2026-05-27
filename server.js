@@ -7,6 +7,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import fs from 'fs';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +21,7 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname)));  // serves manifest.json, sw.js from root
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ─── Multer (image uploads) ───────────────────────────────────────────────────
@@ -53,6 +55,7 @@ const invitationSchema = new mongoose.Schema({
   image_url:   String,
   price:       { type: Number, default: 0 },
   package:     { type: String, default: 'Basic', enum: ['Basic', 'Premium', 'Luxury'] },
+  order_count: { type: Number, default: 0 },
   created_at:  { type: Date, default: Date.now }
 });
 invitationSchema.set('toJSON', { virtuals: true });
@@ -65,8 +68,10 @@ const requestSchema = new mongoose.Schema({
   phone_number:    { type: String, required: true },
   wedding_date:    { type: String, required: true },
   notes:           String,
+  admin_notes:     { type: String, default: '' },
   status:          { type: String, default: 'pending', enum: ['pending','in_progress','completed','archived'] },
   price:           { type: Number, default: 0 },
+  tracking_id:     { type: String, unique: true, sparse: true },
   created_at:      { type: Date, default: Date.now }
 });
 requestSchema.set('toJSON', { virtuals: true });
@@ -92,11 +97,11 @@ async function initializeDatabase() {
     const count = await Invitation.countDocuments();
     if (count === 0) {
       await Invitation.insertMany([
-        { name: 'Classic Elegance',   description: 'Timeless design with sophisticated typography', price: 2500, package: 'Basic',   image_url: 'https://images.unsplash.com/photo-1519741497674-611481863552?w=400&h=300&fit=crop' },
-        { name: 'Modern Minimalist',  description: 'Clean lines and contemporary aesthetic',         price: 3500, package: 'Premium', image_url: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=400&h=300&fit=crop' },
-        { name: 'Romantic Florals',   description: 'Beautiful floral patterns and soft colors',      price: 3000, package: 'Basic',   image_url: 'https://images.unsplash.com/photo-1520763185298-1b434c919abe?w=400&h=300&fit=crop' },
-        { name: 'Gold Luxury',        description: 'Premium design with gold accents',               price: 6000, package: 'Luxury',  image_url: 'https://images.unsplash.com/photo-1514888286974-6c03bf1a7dba?w=400&h=300&fit=crop' },
-        { name: 'Artistic Modern',    description: 'Contemporary art-inspired design',               price: 4500, package: 'Premium', image_url: 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=400&h=300&fit=crop' }
+        { name: 'Classic Elegance',   description: 'Timeless design with sophisticated typography', price: 2500, package: 'Basic',   order_count: 0, image_url: 'https://images.unsplash.com/photo-1519741497674-611481863552?w=400&h=300&fit=crop' },
+        { name: 'Modern Minimalist',  description: 'Clean lines and contemporary aesthetic',         price: 3500, package: 'Premium', order_count: 0, image_url: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?w=400&h=300&fit=crop' },
+        { name: 'Romantic Florals',   description: 'Beautiful floral patterns and soft colors',      price: 3000, package: 'Basic',   order_count: 0, image_url: 'https://images.unsplash.com/photo-1520763185298-1b434c919abe?w=400&h=300&fit=crop' },
+        { name: 'Gold Luxury',        description: 'Premium design with gold accents',               price: 6000, package: 'Luxury',  order_count: 0, image_url: 'https://images.unsplash.com/photo-1514888286974-6c03bf1a7dba?w=400&h=300&fit=crop' },
+        { name: 'Artistic Modern',    description: 'Contemporary art-inspired design',               price: 4500, package: 'Premium', order_count: 0, image_url: 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=400&h=300&fit=crop' }
       ]);
       console.log('✓ Sample invitations seeded');
     }
@@ -111,6 +116,10 @@ function checkAdmin(req, res) {
     return false;
   }
   return true;
+}
+
+function generateTrackingId() {
+  return crypto.randomBytes(5).toString('hex').toUpperCase();
 }
 
 // ─── WhatsApp Notification (CallMeBot) ────────────────────────────────────────
@@ -146,6 +155,7 @@ async function sendStatusUpdate(requestData) {
         <p>Dear ${requestData.first_name},</p>
         <p>Your request for <strong>${requestData.invitation_name}</strong> has been updated to: <strong>${statusLabel[requestData.status]}</strong></p>
         ${requestData.status === 'completed' ? '<p>Your invitation is ready! We will contact you shortly.</p>' : ''}
+        ${requestData.tracking_id ? `<p>Track your order: <a href="${process.env.SITE_URL||''}/track/${requestData.tracking_id}">${process.env.SITE_URL||''}/track/${requestData.tracking_id}</a></p>` : ''}
         <p>Thank you for choosing us!</p>
       `
     });
@@ -154,9 +164,14 @@ async function sendStatusUpdate(requestData) {
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
+
+// Feature #12: sort by popularity
 app.get('/api/invitations', async (req, res) => {
   try {
-    const invitations = await Invitation.find().sort({ created_at: -1 });
+    const sort = req.query.sort === 'popular'
+      ? { order_count: -1 }
+      : { created_at: -1 };
+    const invitations = await Invitation.find().sort(sort);
     res.json(invitations);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -169,19 +184,62 @@ app.get('/api/invitations/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Feature #15: sample PDF download (watermarked redirect)
+app.get('/api/invitations/:id/sample', async (req, res) => {
+  try {
+    const inv = await Invitation.findById(req.params.id);
+    if (!inv) return res.status(404).json({ error: 'Not found' });
+    // Redirect to image with watermark note; real PDF gen requires puppeteer
+    res.json({ sample_url: inv.image_url, name: inv.name, watermark: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Feature #5: public order tracking
+app.get('/api/track/:trackingId', async (req, res) => {
+  try {
+    const req2 = await Request.findOne({ tracking_id: req.params.trackingId });
+    if (!req2) return res.status(404).json({ error: 'Order not found' });
+    // Return only safe public fields
+    res.json({
+      tracking_id:     req2.tracking_id,
+      first_name:      req2.first_name,
+      invitation_name: req2.invitation_name,
+      wedding_date:    req2.wedding_date,
+      status:          req2.status,
+      created_at:      req2.created_at
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/requests', async (req, res) => {
   try {
     const { invitation_id, invitation_name, first_name, last_name, phone_number, wedding_date, notes, price } = req.body;
     if (!invitation_id || !first_name || !last_name || !phone_number || !wedding_date)
       return res.status(400).json({ error: 'Missing required fields' });
 
-    const saved = await new Request({ invitation_id, invitation_name, first_name, last_name, phone_number, wedding_date, notes: notes||'', price: price||0 }).save();
+    // Generate unique tracking ID
+    let tracking_id, attempts = 0;
+    do {
+      tracking_id = generateTrackingId();
+      attempts++;
+    } while (attempts < 10 && await Request.findOne({ tracking_id }));
+
+    const saved = await new Request({
+      invitation_id, invitation_name, first_name, last_name,
+      phone_number, wedding_date, notes: notes||'', price: price||0, tracking_id
+    }).save();
+
+    // Feature #12: increment order_count
+    await Invitation.findByIdAndUpdate(invitation_id, { $inc: { order_count: 1 } });
+
+    const siteUrl = process.env.SITE_URL || `http://localhost:${PORT}`;
+    const trackUrl = `${siteUrl}/track/${tracking_id}`;
 
     await sendWhatsApp(
-      `🌸 New Wedding Invitation Request!\n👤 ${first_name} ${last_name}\n📱 ${phone_number}\n💍 Wedding: ${wedding_date}\n🎨 Template: ${invitation_name}\n💰 Price: ${price||0} DA\n📝 Notes: ${notes||'None'}`
+      `🌸 New Wedding Invitation Request!\n👤 ${first_name} ${last_name}\n📱 ${phone_number}\n💍 Wedding: ${wedding_date}\n🎨 Template: ${invitation_name}\n💰 Price: ${price||0} DA\n📝 Notes: ${notes||'None'}\n🔗 Track: ${trackUrl}`
     );
 
-    res.json({ success: true, id: saved._id, message: 'Request submitted successfully' });
+    res.json({ success: true, id: saved._id, tracking_id, track_url: trackUrl, message: 'Request submitted successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -202,7 +260,7 @@ app.post('/api/reviews', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Analytics — public summary (no sensitive data)
+// Analytics — public summary
 app.get('/api/analytics/summary', async (req, res) => {
   try {
     const total      = await Request.countDocuments();
@@ -216,7 +274,6 @@ app.get('/api/analytics/summary', async (req, res) => {
     ]);
     const revenue = revenueAgg[0]?.total || 0;
 
-    // Requests per month (last 6 months)
     const sixMonthsAgo = new Date(); sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const monthly = await Request.aggregate([
       { $match: { created_at: { $gte: sixMonthsAgo } } },
@@ -224,7 +281,6 @@ app.get('/api/analytics/summary', async (req, res) => {
       { $sort: { '_id.year': 1, '_id.month': 1 } }
     ]);
 
-    // Top templates
     const topTemplates = await Request.aggregate([
       { $group: { _id: '$invitation_name', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
@@ -236,14 +292,13 @@ app.get('/api/analytics/summary', async (req, res) => {
 });
 
 // ─── Admin API ────────────────────────────────────────────────────────────────
-// IMPORTANT: export/csv MUST be before /:id
 app.get('/api/admin/requests/export/csv', async (req, res) => {
   if (!checkAdmin(req, res)) return;
   try {
     const requests = await Request.find().sort({ created_at: -1 });
-    let csv = 'ID,First Name,Last Name,Phone,Wedding Date,Invitation,Price,Notes,Status,Created At\n';
+    let csv = 'ID,Tracking ID,First Name,Last Name,Phone,Wedding Date,Invitation,Price,Notes,Admin Notes,Status,Created At\n';
     requests.forEach(r => {
-      csv += `${r._id},"${r.first_name}","${r.last_name}","${r.phone_number}","${r.wedding_date}","${r.invitation_name}","${r.price||0}","${r.notes||''}","${r.status}","${r.created_at}"\n`;
+      csv += `${r._id},"${r.tracking_id||''}","${r.first_name}","${r.last_name}","${r.phone_number}","${r.wedding_date}","${r.invitation_name}","${r.price||0}","${r.notes||''}","${r.admin_notes||''}","${r.status}","${r.created_at}"\n`;
     });
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=requests.csv');
@@ -259,10 +314,23 @@ app.get('/api/admin/requests', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Feature #9: bulk status update
+app.put('/api/admin/requests/bulk', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const { ids, status } = req.body;
+    if (!ids?.length || !status) return res.status(400).json({ error: 'ids and status required' });
+    await Request.updateMany({ _id: { $in: ids } }, { status });
+    res.json({ success: true, updated: ids.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.put('/api/admin/requests/:id', async (req, res) => {
   if (!checkAdmin(req, res)) return;
   try {
-    const updated = await Request.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
+    const update = { status: req.body.status };
+    if (req.body.admin_notes !== undefined) update.admin_notes = req.body.admin_notes;
+    const updated = await Request.findByIdAndUpdate(req.params.id, update, { new: true });
     if (updated && req.body.notify) await sendStatusUpdate(updated);
     res.json({ success: true, data: updated });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -339,9 +407,12 @@ app.delete('/api/admin/reviews/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ─── SPA fallback ─────────────────────────────────────────────────────────────
+// ─── SPA fallback (also handles /track/:id on client) ────────────────────────
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  const idx = path.join(__dirname, 'public', 'index.html');
+  const idx2 = path.join(__dirname, 'index.html');
+  if (fs.existsSync(idx)) res.sendFile(idx);
+  else res.sendFile(idx2);
 });
 
 app.listen(PORT, () => {
