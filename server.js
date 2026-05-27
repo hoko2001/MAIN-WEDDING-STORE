@@ -124,43 +124,97 @@ function generateTrackingId() {
 
 // ─── WhatsApp Notification (CallMeBot) ────────────────────────────────────────
 async function sendWhatsApp(message) {
+  console.log('📲 [WA] sendWhatsApp() called');
   const phone  = process.env.WHATSAPP_PHONE;
   const apiKey = process.env.WHATSAPP_APIKEY;
-  if (!phone || !apiKey) return;
+  console.log('📲 [WA] phone set:', !!phone, '| apiKey set:', !!apiKey);
+  if (!phone || !apiKey) {
+    console.error('❌ [WA] WHATSAPP_PHONE or WHATSAPP_APIKEY missing in env vars');
+    return;
+  }
+  const cleanPhone = phone.replace(/\D/g, '');
+  console.log('📲 [WA] cleanPhone:', cleanPhone, '| apiKey length:', apiKey.length);
   try {
     const encoded = encodeURIComponent(message);
-    const url = `https://api.callmebot.com/whatsapp.php?phone=${phone}&text=${encoded}&apikey=${apiKey}`;
-    await fetch(url);
-    console.log('✓ WhatsApp notification sent');
-  } catch (err) { console.error('WhatsApp error:', err.message); }
+    const url = `https://api.callmebot.com/whatsapp.php?phone=${cleanPhone}&text=${encoded}&apikey=${apiKey}`;
+    console.log('📲 [WA] Calling URL:', url.substring(0, 120) + '...');
+    const res = await fetch(url);
+    const body = await res.text();
+    console.log('📲 [WA] HTTP status:', res.status);
+    console.log('📲 [WA] Response body:', body);
+  } catch (err) {
+    console.error('❌ [WA] fetch threw error:', err.message);
+    console.error(err.stack);
+  }
 }
 
-// ─── SMS / Email status update ────────────────────────────────────────────────
-async function sendStatusUpdate(requestData) {
+// ─── Email helpers ────────────────────────────────────────────────────────────
+function createTransporter() {
   const emailUser = process.env.EMAIL_USER;
   const emailPass = process.env.EMAIL_PASSWORD;
-  if (!emailUser || !emailPass) return;
+  console.log('📧 [EMAIL] EMAIL_USER set:', !!emailUser, '| EMAIL_PASSWORD set:', !!emailPass);
+  if (!emailUser || !emailPass) {
+    console.error('❌ [EMAIL] EMAIL_USER or EMAIL_PASSWORD missing in env vars');
+    return null;
+  }
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: emailUser, pass: emailPass }
+  });
+}
+
+// Notify admin when a NEW request arrives
+async function sendNewRequestEmail(req) {
+  console.log('📧 [EMAIL] sendNewRequestEmail() called');
+  const transporter = createTransporter();
+  if (!transporter) return;
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+  console.log('📧 [EMAIL] Sending to:', adminEmail);
   try {
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: emailUser, pass: emailPass }
-    });
-    const statusLabel = { pending: 'Pending', in_progress: 'In Progress', completed: '✅ Completed & Ready!', archived: 'Archived' };
     await transporter.sendMail({
-      from: emailUser,
-      to: requestData.client_email || process.env.ADMIN_EMAIL,
-      subject: `Your Invitation Request Update — ${statusLabel[requestData.status] || requestData.status}`,
+      from: process.env.EMAIL_USER,
+      to: adminEmail,
+      subject: `🌸 New Wedding Request — ${req.first_name} ${req.last_name}`,
       html: `
-        <h2>Invitation Request Update</h2>
-        <p>Dear ${requestData.first_name},</p>
-        <p>Your request for <strong>${requestData.invitation_name}</strong> has been updated to: <strong>${statusLabel[requestData.status]}</strong></p>
-        ${requestData.status === 'completed' ? '<p>Your invitation is ready! We will contact you shortly.</p>' : ''}
-        ${requestData.tracking_id ? `<p>Track your order: <a href="${process.env.SITE_URL||''}/track/${requestData.tracking_id}">${process.env.SITE_URL||''}/track/${requestData.tracking_id}</a></p>` : ''}
-        <p>Thank you for choosing us!</p>
+        <h2 style="color:#ec4899">New Wedding Invitation Request</h2>
+        <table style="border-collapse:collapse;width:100%">
+          <tr><td style="padding:6px;color:#666">Client</td><td style="padding:6px"><strong>${req.first_name} ${req.last_name}</strong></td></tr>
+          <tr><td style="padding:6px;color:#666">Phone</td><td style="padding:6px">${req.phone_number}</td></tr>
+          <tr><td style="padding:6px;color:#666">Wedding Date</td><td style="padding:6px">${req.wedding_date}</td></tr>
+          <tr><td style="padding:6px;color:#666">Template</td><td style="padding:6px">${req.invitation_name}</td></tr>
+          <tr><td style="padding:6px;color:#666">Price</td><td style="padding:6px">${(req.price||0).toLocaleString()} DA</td></tr>
+          <tr><td style="padding:6px;color:#666">Notes</td><td style="padding:6px">${req.notes||'—'}</td></tr>
+          <tr><td style="padding:6px;color:#666">Tracking ID</td><td style="padding:6px">${req.tracking_id||'—'}</td></tr>
+        </table>
       `
     });
-    console.log('✓ Status email sent');
-  } catch (err) { console.error('Email error:', err.message); }
+    console.log('✓ [EMAIL] New request email sent to admin');
+  } catch (err) {
+    console.error('❌ [EMAIL] sendNewRequestEmail failed:', err.message);
+    console.error('❌ [EMAIL] Full error:', err.toString());
+  }
+}
+
+// Notify admin when status changes
+async function sendStatusUpdate(requestData) {
+  const transporter = createTransporter();
+  if (!transporter) return;
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+  const statusLabel = { pending: 'Pending', in_progress: 'In Progress', completed: '✅ Completed & Ready!', archived: 'Archived' };
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: adminEmail,
+      subject: `📋 Request Updated — ${requestData.first_name} ${requestData.last_name} → ${statusLabel[requestData.status]||requestData.status}`,
+      html: `
+        <h2>Request Status Updated</h2>
+        <p><strong>${requestData.first_name} ${requestData.last_name}</strong> — ${requestData.invitation_name}</p>
+        <p>New status: <strong style="color:#ec4899">${statusLabel[requestData.status]||requestData.status}</strong></p>
+        ${requestData.tracking_id ? `<p>Tracking ID: ${requestData.tracking_id}</p>` : ''}
+      `
+    });
+    console.log('✓ Status update email sent');
+  } catch (err) { console.error('Email error (status update):', err.message); }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -235,9 +289,19 @@ app.post('/api/requests', async (req, res) => {
     const siteUrl = process.env.SITE_URL || `http://localhost:${PORT}`;
     const trackUrl = `${siteUrl}/track/${tracking_id}`;
 
-    await sendWhatsApp(
-      `🌸 New Wedding Invitation Request!\n👤 ${first_name} ${last_name}\n📱 ${phone_number}\n💍 Wedding: ${wedding_date}\n🎨 Template: ${invitation_name}\n💰 Price: ${price||0} DA\n📝 Notes: ${notes||'None'}\n🔗 Track: ${trackUrl}`
-    );
+    console.log('🔔 [NOTIFY] Firing notifications for new request:', saved._id);
+    // Send both WhatsApp and email notifications in parallel
+    const notifResults = await Promise.allSettled([
+      sendWhatsApp(
+        `🌸 New Wedding Request!\n👤 ${first_name} ${last_name}\n📱 ${phone_number}\n💍 Wedding: ${wedding_date}\n🎨 Template: ${invitation_name}\n💰 Price: ${price||0} DA\n📝 Notes: ${notes||'None'}\n🔗 Track: ${trackUrl}`
+      ),
+      sendNewRequestEmail(saved)
+    ]);
+    notifResults.forEach((r, i) => {
+      const name = i === 0 ? 'WhatsApp' : 'Email';
+      if (r.status === 'rejected') console.error(`❌ [NOTIFY] ${name} promise rejected:`, r.reason);
+      else console.log(`✅ [NOTIFY] ${name} promise resolved`);
+    });
 
     res.json({ success: true, id: saved._id, tracking_id, track_url: trackUrl, message: 'Request submitted successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
