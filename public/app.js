@@ -8,16 +8,14 @@ document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
 });
 
-// Setup event listeners
 function setupEventListeners() {
     document.getElementById('searchInput').addEventListener('input', (e) => {
         filterInvitations(e.target.value);
     });
-
     document.getElementById('requestForm').addEventListener('submit', submitRequest);
 }
 
-// Load invitations from API
+// ─── Gallery ──────────────────────────────────────────────────────────────────
 async function loadInvitations() {
     try {
         const response = await fetch('/api/invitations');
@@ -30,34 +28,30 @@ async function loadInvitations() {
     }
 }
 
-// Render gallery
 function renderGallery(invitations) {
-    const galleryGrid = document.getElementById('galleryGrid');
+    const galleryGrid   = document.getElementById('galleryGrid');
     const templateCount = document.getElementById('templateCount');
-
     galleryGrid.innerHTML = '';
 
     if (invitations.length === 0) {
-        galleryGrid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #475569;">No invitations found</p>';
+        galleryGrid.innerHTML = '<p style="grid-column:1/-1;text-align:center;color:#475569;">No invitations found</p>';
         templateCount.textContent = '0 templates available';
         return;
     }
 
     invitations.forEach(invitation => {
+        // FIX: MongoDB returns _id, not id
+        const id = invitation._id || invitation.id;
         const card = document.createElement('div');
         card.className = 'card';
         card.innerHTML = `
             <div class="card-image">
                 <img src="${invitation.image_url}" alt="${invitation.name}" onerror="this.style.display='none'">
-                ${!invitation.image_url ? `<div style="position: absolute; text-align: center;">
-                    <div style="font-size: 0.875rem; font-weight: 500; color: #475569;">Template Preview</div>
-                    <div style="font-size: 0.75rem; color: #94a3b8;">${invitation.name}</div>
-                </div>` : ''}
             </div>
             <div class="card-content">
                 <h3 class="card-title">${invitation.name}</h3>
                 <p class="card-description">${invitation.description}</p>
-                <button class="card-button" onclick="openRequestModal(${invitation.id})">Select</button>
+                <button class="card-button" onclick="openRequestModal('${id}')">Select</button>
             </div>
         `;
         galleryGrid.appendChild(card);
@@ -66,7 +60,6 @@ function renderGallery(invitations) {
     templateCount.textContent = `${invitations.length} ${invitations.length === 1 ? 'template' : 'templates'} available`;
 }
 
-// Filter invitations
 function filterInvitations(query) {
     const filtered = allInvitations.filter(inv =>
         inv.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -75,49 +68,47 @@ function filterInvitations(query) {
     renderGallery(filtered);
 }
 
-// Populate invitation select
 function populateInvitationSelect() {
     const select = document.getElementById('invitationSelect');
     select.innerHTML = '<option value="">Choose a template</option>';
     allInvitations.forEach(inv => {
+        // FIX: use _id (MongoDB ObjectId string)
+        const id = inv._id || inv.id;
         const option = document.createElement('option');
-        option.value = inv.id;
+        option.value = id;
         option.textContent = inv.name;
         select.appendChild(option);
     });
 }
 
-// Open request modal
+// ─── Request modal ────────────────────────────────────────────────────────────
 function openRequestModal(invitationId) {
     document.getElementById('invitationSelect').value = invitationId;
     document.getElementById('requestModal').classList.add('active');
     document.body.style.overflow = 'hidden';
 }
 
-// Close request modal
 function closeRequestModal() {
     document.getElementById('requestModal').classList.remove('active');
     document.getElementById('requestForm').reset();
     document.body.style.overflow = 'auto';
 }
 
-// Close success modal
 function closeSuccessModal() {
     document.getElementById('successModal').classList.remove('active');
     document.body.style.overflow = 'auto';
 }
 
-// Submit request
 async function submitRequest(event) {
     event.preventDefault();
 
-    const invitationId = document.getElementById('invitationSelect').value;
+    const invitationId   = document.getElementById('invitationSelect').value;
     const invitationName = document.querySelector(`#invitationSelect option[value="${invitationId}"]`).textContent;
-    const firstName = document.getElementById('firstName').value;
-    const lastName = document.getElementById('lastName').value;
-    const phoneNumber = document.getElementById('phoneNumber').value;
-    const weddingDate = document.getElementById('weddingDate').value;
-    const notes = document.getElementById('notes').value;
+    const firstName      = document.getElementById('firstName').value;
+    const lastName       = document.getElementById('lastName').value;
+    const phoneNumber    = document.getElementById('phoneNumber').value;
+    const weddingDate    = document.getElementById('weddingDate').value;
+    const notes          = document.getElementById('notes').value;
 
     if (!invitationId || !firstName || !lastName || !phoneNumber || !weddingDate) {
         alert('Please fill in all required fields');
@@ -127,17 +118,15 @@ async function submitRequest(event) {
     try {
         const response = await fetch('/api/requests', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                invitation_id: invitationId,
+                invitation_id:   invitationId,
                 invitation_name: invitationName,
-                first_name: firstName,
-                last_name: lastName,
-                phone_number: phoneNumber,
-                wedding_date: weddingDate,
-                notes: notes
+                first_name:      firstName,
+                last_name:       lastName,
+                phone_number:    phoneNumber,
+                wedding_date:    weddingDate,
+                notes
             })
         });
 
@@ -157,7 +146,7 @@ async function submitRequest(event) {
     }
 }
 
-// Admin functions
+// ─── Admin ────────────────────────────────────────────────────────────────────
 function openAdminPanel() {
     document.getElementById('adminModal').classList.add('active');
     document.body.style.overflow = 'hidden';
@@ -170,46 +159,49 @@ function closeAdminPanel() {
 }
 
 async function loginAdmin() {
-    const key = document.getElementById('adminKey').value;
-
-    if (!key) {
-        alert('Please enter admin key');
-        return;
-    }
+    const key = document.getElementById('adminKey').value.trim();
+    if (!key) { alert('Please enter admin key'); return; }
 
     try {
-        const response = await fetch(`/api/admin/requests?key=${key}`);
-
+        const response = await fetch(`/api/admin/requests?key=${encodeURIComponent(key)}`);
         if (response.ok) {
             adminKey = key;
-            document.getElementById('adminLogin').style.display = 'none';
+            document.getElementById('adminLogin').style.display     = 'none';
             document.getElementById('adminDashboard').style.display = 'block';
             loadAdminRequests();
         } else {
-            alert('Invalid admin key');
+            alert('Invalid admin key – make sure it matches the ADMIN_KEY environment variable on Render.');
         }
     } catch (error) {
         console.error('Error logging in:', error);
-        alert('Error logging in');
+        alert('Error connecting to server');
     }
 }
 
 async function loadAdminRequests() {
     try {
-        const response = await fetch(`/api/admin/requests?key=${adminKey}`);
+        const response = await fetch(`/api/admin/requests?key=${encodeURIComponent(adminKey)}`);
         const requests = await response.json();
-
         const requestsList = document.getElementById('requestsList');
         requestsList.innerHTML = '';
 
-        if (requests.length === 0) {
-            requestsList.innerHTML = '<p style="text-align: center; color: #475569;">No requests yet</p>';
+        if (!Array.isArray(requests) || requests.length === 0) {
+            requestsList.innerHTML = '<p style="text-align:center;color:#475569;">No requests yet</p>';
             return;
         }
 
         requests.forEach(request => {
+            // FIX: use _id for all IDs
+            const id = request._id || request.id;
             const item = document.createElement('div');
             item.className = 'request-item';
+
+            // FIX: build <select> with correct selected option instead of broken value= attribute
+            const statusOptions = ['pending', 'in_progress', 'completed', 'archived'];
+            const statusSelect = statusOptions.map(s =>
+                `<option value="${s}" ${request.status === s ? 'selected' : ''}>${s.replace('_', ' ')}</option>`
+            ).join('');
+
             item.innerHTML = `
                 <h3>${request.first_name} ${request.last_name}</h3>
                 <div class="request-info">
@@ -217,19 +209,13 @@ async function loadAdminRequests() {
                     <div><strong>Wedding Date:</strong> ${request.wedding_date}</div>
                     <div><strong>Template:</strong> ${request.invitation_name}</div>
                     <div><strong>Submitted:</strong> ${new Date(request.created_at).toLocaleDateString()}</div>
-                    ${request.notes ? `<div style="grid-column: 1/-1;"><strong>Notes:</strong> ${request.notes}</div>` : ''}
+                    ${request.notes ? `<div style="grid-column:1/-1"><strong>Notes:</strong> ${request.notes}</div>` : ''}
                 </div>
                 <div class="request-status">
-                    <select id="status-${request.id}" value="${request.status}">
-                        <option value="pending">Pending</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                        <option value="archived">Archived</option>
-                    </select>
-                    <button onclick="updateRequestStatus(${request.id})">Update</button>
-                    <button style="background: #ef4444;" onclick="deleteRequest(${request.id})">Delete</button>
+                    <select id="status-${id}">${statusSelect}</select>
+                    <button onclick="updateRequestStatus('${id}')">Update</button>
+                    <button style="background:#ef4444;" onclick="deleteRequest('${id}')">Delete</button>
                 </div>
-            </div>
             `;
             requestsList.appendChild(item);
         });
@@ -241,18 +227,13 @@ async function loadAdminRequests() {
 
 async function updateRequestStatus(requestId) {
     const status = document.getElementById(`status-${requestId}`).value;
-
     try {
-        const response = await fetch(`/api/admin/requests/${requestId}?key=${adminKey}`, {
+        const response = await fetch(`/api/admin/requests/${requestId}?key=${encodeURIComponent(adminKey)}`, {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status })
         });
-
         if (response.ok) {
-            alert('Status updated');
             loadAdminRequests();
         } else {
             alert('Error updating status');
@@ -264,17 +245,12 @@ async function updateRequestStatus(requestId) {
 }
 
 async function deleteRequest(requestId) {
-    if (!confirm('Are you sure you want to delete this request?')) {
-        return;
-    }
-
+    if (!confirm('Are you sure you want to delete this request?')) return;
     try {
-        const response = await fetch(`/api/admin/requests/${requestId}?key=${adminKey}`, {
+        const response = await fetch(`/api/admin/requests/${requestId}?key=${encodeURIComponent(adminKey)}`, {
             method: 'DELETE'
         });
-
         if (response.ok) {
-            alert('Request deleted');
             loadAdminRequests();
         } else {
             alert('Error deleting request');
@@ -287,13 +263,12 @@ async function deleteRequest(requestId) {
 
 async function exportCSV() {
     try {
-        const response = await fetch(`/api/admin/requests/export/csv?key=${adminKey}`);
-        const csv = await response.text();
-
+        const response = await fetch(`/api/admin/requests/export/csv?key=${encodeURIComponent(adminKey)}`);
+        const csv  = await response.text();
         const blob = new Blob([csv], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
+        const url  = window.URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
         a.download = `requests-${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
         window.URL.revokeObjectURL(url);
@@ -305,19 +280,15 @@ async function exportCSV() {
 
 function logoutAdmin() {
     adminKey = null;
-    document.getElementById('adminLogin').style.display = 'block';
+    document.getElementById('adminLogin').style.display     = 'block';
     document.getElementById('adminDashboard').style.display = 'none';
-    document.getElementById('adminKey').value = '';
-    document.getElementById('requestsList').innerHTML = '';
+    document.getElementById('adminKey').value               = '';
+    document.getElementById('requestsList').innerHTML       = '';
 }
 
-// Close modals when clicking outside
+// Close modals when clicking the backdrop
 document.addEventListener('click', (e) => {
-    const requestModal = document.getElementById('requestModal');
-    const successModal = document.getElementById('successModal');
-    const adminModal = document.getElementById('adminModal');
-
-    if (e.target === requestModal) closeRequestModal();
-    if (e.target === successModal) closeSuccessModal();
-    if (e.target === adminModal) closeAdminPanel();
+    if (e.target === document.getElementById('requestModal')) closeRequestModal();
+    if (e.target === document.getElementById('successModal')) closeSuccessModal();
+    if (e.target === document.getElementById('adminModal'))   closeAdminPanel();
 });
