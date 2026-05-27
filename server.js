@@ -1,5 +1,3 @@
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
@@ -10,12 +8,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import fs from 'fs';
 import crypto from 'crypto';
-app.use(helmet());
-app.use(cors({ origin: process.env.SITE_URL || '*' }));
 
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
-app.use('/api/requests', limiter);
-app.use('/api/admin', rateLimit({ windowMs: 15 * 60 * 1000, max: 30 }));
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
