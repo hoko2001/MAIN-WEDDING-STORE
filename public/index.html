@@ -1,141 +1,275 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wedding Invitations - Beautiful Templates</title>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wedding Invitations — Beautiful Templates</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Navigation -->
-    <nav class="navbar">
-        <div class="container">
-            <div class="navbar-content">
-                <div class="logo">
-                    <span class="heart">♥</span>
-                    <span class="logo-text">Invitations</span>
-                </div>
-                <div class="nav-links">
-                    <a href="#" class="nav-link">Home</a>
-                    <a href="#gallery" class="nav-link">Gallery</a>
-                    <a href="#" class="nav-link admin-link" onclick="openAdminPanel()">Admin</a>
-                </div>
-            </div>
+
+<!-- ═══ NAVBAR ═══════════════════════════════════════════════════════════════ -->
+<nav class="navbar">
+  <div class="container">
+    <div class="navbar-content">
+      <div class="logo">
+        <span class="heart">♥</span>
+        <span class="logo-text">Invitations</span>
+      </div>
+      <div class="nav-links">
+        <a href="#" class="nav-link" onclick="setLang('en')">EN</a>
+        <a href="#" class="nav-link" onclick="setLang('fr')">FR</a>
+        <a href="#" class="nav-link" onclick="setLang('ar')">AR</a>
+        <a href="#gallery" class="nav-link" data-i18n="nav_gallery">Gallery</a>
+        <a href="#reviews" class="nav-link" data-i18n="nav_reviews">Reviews</a>
+        <a href="#" class="nav-link admin-link" onclick="openAdminPanel()">Admin</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ HERO ══════════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-content">
+      <div class="sparkles">✨ <span data-i18n="hero_badge">BEAUTIFUL INVITATIONS</span> ✨</div>
+      <h1 class="hero-title" data-i18n="hero_title">Find Your Perfect <span class="gradient-text">Invitation</span></h1>
+      <p class="hero-subtitle" data-i18n="hero_subtitle">Browse our collection of stunning wedding invitation templates.</p>
+      <div class="search-container">
+        <input type="text" id="searchInput" class="search-bar" data-i18n-placeholder="search_placeholder" placeholder="Search invitations...">
+        <span class="search-icon">🔍</span>
+      </div>
+      <div class="filter-row">
+        <button class="filter-btn active" onclick="filterByPackage('all', this)" data-i18n="filter_all">All</button>
+        <button class="filter-btn" onclick="filterByPackage('Basic', this)">Basic</button>
+        <button class="filter-btn" onclick="filterByPackage('Premium', this)">Premium</button>
+        <button class="filter-btn" onclick="filterByPackage('Luxury', this)">Luxury</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ ANALYTICS BANNER ══════════════════════════════════════════════════════ -->
+<section class="stats-banner">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat-item"><span class="stat-num" id="statTotal">—</span><span class="stat-label" data-i18n="stat_total">Total Requests</span></div>
+      <div class="stat-item"><span class="stat-num" id="statPending">—</span><span class="stat-label" data-i18n="stat_pending">Pending</span></div>
+      <div class="stat-item"><span class="stat-num" id="statCompleted">—</span><span class="stat-label" data-i18n="stat_completed">Completed</span></div>
+      <div class="stat-item"><span class="stat-num" id="statRevenue">—</span><span class="stat-label" data-i18n="stat_revenue">Revenue (DA)</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ GALLERY ═══════════════════════════════════════════════════════════════ -->
+<section id="gallery" class="gallery">
+  <div class="container">
+    <h2 class="gallery-title" data-i18n="gallery_title">All Templates</h2>
+    <p class="gallery-subtitle" id="templateCount">Loading...</p>
+    <div class="gallery-grid" id="galleryGrid"></div>
+  </div>
+</section>
+
+<!-- ═══ REVIEWS ═══════════════════════════════════════════════════════════════ -->
+<section id="reviews" class="reviews-section">
+  <div class="container">
+    <h2 class="gallery-title" data-i18n="reviews_title">⭐ Client Reviews</h2>
+    <p class="gallery-subtitle" data-i18n="reviews_sub">What our happy couples say</p>
+    <div class="reviews-grid" id="reviewsGrid"><p style="text-align:center;color:#94a3b8;">Loading reviews...</p></div>
+    <div style="text-align:center;margin-top:2rem;">
+      <button class="submit-btn" onclick="openReviewModal()" data-i18n="leave_review">✍️ Leave a Review</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ REQUEST MODAL ═════════════════════════════════════════════════════════ -->
+<div id="requestModal" class="modal">
+  <div class="modal-content">
+    <button class="modal-close" onclick="closeRequestModal()">×</button>
+    <h2 data-i18n="modal_title">Customize Your <span class="gradient-text">Invitation</span></h2>
+    <div id="selectedTemplateInfo" class="template-info-bar"></div>
+    <form id="requestForm" class="form">
+      <div class="form-group">
+        <label data-i18n="form_template">Template</label>
+        <select id="invitationSelect" required>
+          <option value="">Choose a template</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label data-i18n="form_first">First Name</label>
+          <input type="text" id="firstName" required placeholder="First name">
         </div>
-    </nav>
-
-    <!-- Hero Section -->
-    <section class="hero">
-        <div class="container">
-            <div class="hero-content">
-                <div class="sparkles">✨ BEAUTIFUL INVITATIONS ✨</div>
-                <h1 class="hero-title">Find Your Perfect <span class="gradient-text">Invitation</span></h1>
-                <p class="hero-subtitle">Browse our collection of stunning wedding invitation templates. Customize with your details and we'll bring your vision to life.</p>
-                
-                <!-- Search Bar -->
-                <div class="search-container">
-                    <input type="text" id="searchInput" class="search-bar" placeholder="Search invitations by name or style...">
-                    <span class="search-icon">🔍</span>
-                </div>
-            </div>
+        <div class="form-group">
+          <label data-i18n="form_last">Last Name</label>
+          <input type="text" id="lastName" required placeholder="Last name">
         </div>
-    </section>
+      </div>
+      <div class="form-group">
+        <label data-i18n="form_phone">Phone Number</label>
+        <input type="tel" id="phoneNumber" required placeholder="+213...">
+      </div>
+      <div class="form-group">
+        <label data-i18n="form_date">Wedding Date</label>
+        <input type="date" id="weddingDate" required>
+      </div>
+      <div class="form-group">
+        <label data-i18n="form_notes">Special Instructions (Optional)</label>
+        <textarea id="notes" placeholder="Any special requests..."></textarea>
+      </div>
+      <div id="priceSummary" class="price-summary"></div>
+      <button type="submit" class="submit-btn" data-i18n="form_submit">Submit Request</button>
+    </form>
+  </div>
+</div>
 
-    <!-- Gallery Section -->
-    <section id="gallery" class="gallery">
-        <div class="container">
-            <h2 class="gallery-title">All Templates</h2>
-            <p class="gallery-subtitle" id="templateCount">Loading...</p>
-            
-            <div class="gallery-grid" id="galleryGrid">
-                <!-- Templates will be loaded here -->
-            </div>
+<!-- ═══ REVIEW MODAL ══════════════════════════════════════════════════════════ -->
+<div id="reviewModal" class="modal">
+  <div class="modal-content" style="max-width:480px">
+    <button class="modal-close" onclick="closeReviewModal()">×</button>
+    <h2>⭐ <span data-i18n="review_modal_title">Leave a Review</span></h2>
+    <form id="reviewForm" class="form">
+      <div class="form-group">
+        <label data-i18n="review_name">Your Name</label>
+        <input type="text" id="reviewName" required placeholder="Your name">
+      </div>
+      <div class="form-group">
+        <label data-i18n="review_template">Template Used (Optional)</label>
+        <select id="reviewTemplate">
+          <option value="">Select template...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label data-i18n="review_rating">Rating</label>
+        <div class="star-picker" id="starPicker">
+          <span class="star" data-v="1">★</span>
+          <span class="star" data-v="2">★</span>
+          <span class="star" data-v="3">★</span>
+          <span class="star" data-v="4">★</span>
+          <span class="star" data-v="5">★</span>
         </div>
-    </section>
+        <input type="hidden" id="reviewRating" value="0">
+      </div>
+      <div class="form-group">
+        <label data-i18n="review_comment">Comment</label>
+        <textarea id="reviewComment" placeholder="Tell us about your experience..."></textarea>
+      </div>
+      <button type="submit" class="submit-btn" data-i18n="review_submit">Submit Review</button>
+    </form>
+  </div>
+</div>
 
-    <!-- Request Modal -->
-    <div id="requestModal" class="modal">
-        <div class="modal-content">
-            <button class="modal-close" onclick="closeRequestModal()">&times;</button>
-            <h2>Customize Your <span class="gradient-text">Invitation</span></h2>
-            
-            <form id="requestForm" class="form" onsubmit="submitRequest(event)">
-                <div class="form-group">
-                    <label>Select Invitation Template</label>
-                    <select id="invitationSelect" required>
-                        <option value="">Choose a template</option>
-                    </select>
-                </div>
+<!-- ═══ SUCCESS MODAL ═════════════════════════════════════════════════════════ -->
+<div id="successModal" class="modal">
+  <div class="modal-content success-content">
+    <div class="success-icon">✓</div>
+    <h2 data-i18n="success_title">Request Submitted!</h2>
+    <p data-i18n="success_msg">Thank you! We'll contact you soon.</p>
+    <button class="submit-btn" onclick="closeSuccessModal()" data-i18n="close">Close</button>
+  </div>
+</div>
 
-                <div class="form-group">
-                    <label>First Name</label>
-                    <input type="text" id="firstName" required placeholder="Enter your first name">
-                </div>
+<!-- ═══ ADMIN MODAL ════════════════════════════════════════════════════════════ -->
+<div id="adminModal" class="modal">
+  <div class="modal-content admin-content">
+    <button class="modal-close" onclick="closeAdminPanel()">×</button>
+    <h2>🛠️ Admin Dashboard</h2>
 
-                <div class="form-group">
-                    <label>Last Name</label>
-                    <input type="text" id="lastName" required placeholder="Enter your last name">
-                </div>
-
-                <div class="form-group">
-                    <label>Phone Number</label>
-                    <input type="tel" id="phoneNumber" required placeholder="Enter your phone number">
-                </div>
-
-                <div class="form-group">
-                    <label>Wedding Date</label>
-                    <input type="date" id="weddingDate" required>
-                </div>
-
-                <div class="form-group">
-                    <label>Special Instructions (Optional)</label>
-                    <textarea id="notes" placeholder="Tell us any special requests or details..."></textarea>
-                </div>
-
-                <button type="submit" class="submit-btn">Submit Request</button>
-            </form>
-        </div>
+    <!-- Login -->
+    <div id="adminLogin">
+      <p style="margin-bottom:1rem;color:#475569">Enter your admin key:</p>
+      <input type="password" id="adminKey" class="admin-input" placeholder="Admin Key">
+      <button class="submit-btn" onclick="loginAdmin()">Login</button>
     </div>
 
-    <!-- Success Modal -->
-    <div id="successModal" class="modal">
-        <div class="modal-content success-content">
-            <div class="success-icon">✓</div>
-            <h2>Request Submitted!</h2>
-            <p>Thank you for your request. We'll contact you soon with a quote and next steps.</p>
-            <button class="submit-btn" onclick="closeSuccessModal()">Close</button>
+    <!-- Dashboard -->
+    <div id="adminDashboard" style="display:none">
+
+      <!-- Tabs -->
+      <div class="admin-tabs">
+        <button class="tab-btn active" onclick="switchTab('requests', this)">📋 Requests</button>
+        <button class="tab-btn" onclick="switchTab('templates', this)">🎨 Templates</button>
+        <button class="tab-btn" onclick="switchTab('analytics', this)">📊 Analytics</button>
+        <button class="tab-btn" onclick="switchTab('reviews', this)">⭐ Reviews</button>
+      </div>
+
+      <!-- ── Requests tab ── -->
+      <div id="tab-requests" class="tab-pane active">
+        <div class="admin-controls">
+          <button class="submit-btn" onclick="exportCSV()">⬇️ Export CSV</button>
+          <button class="submit-btn danger" onclick="logoutAdmin()">Logout</button>
         </div>
-    </div>
-
-    <!-- Admin Panel Modal -->
-    <div id="adminModal" class="modal">
-        <div class="modal-content admin-content">
-            <button class="modal-close" onclick="closeAdminPanel()">&times;</button>
-            <h2>Admin Dashboard</h2>
-            
-            <div class="admin-login" id="adminLogin">
-                <p>Enter admin key to access dashboard:</p>
-                <input type="password" id="adminKey" placeholder="Admin Key" class="admin-input">
-                <button class="submit-btn" onclick="loginAdmin()">Login</button>
-            </div>
-
-            <div class="admin-dashboard" id="adminDashboard" style="display: none;">
-                <div class="admin-controls">
-                    <button class="submit-btn" onclick="exportCSV()">Export as CSV</button>
-                    <button class="submit-btn" style="background: #ef4444;" onclick="logoutAdmin()">Logout</button>
-                </div>
-                <div id="requestsList" class="requests-list"></div>
-            </div>
+        <div class="status-filter">
+          <button class="filter-btn active" onclick="filterRequests('all',this)">All</button>
+          <button class="filter-btn" onclick="filterRequests('pending',this)">Pending</button>
+          <button class="filter-btn" onclick="filterRequests('in_progress',this)">In Progress</button>
+          <button class="filter-btn" onclick="filterRequests('completed',this)">Completed</button>
+          <button class="filter-btn" onclick="filterRequests('archived',this)">Archived</button>
         </div>
-    </div>
+        <div id="requestsList" class="requests-list"></div>
+      </div>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; 2026 Wedding Invitations. All rights reserved.</p>
+      <!-- ── Templates tab ── -->
+      <div id="tab-templates" class="tab-pane" style="display:none">
+        <div class="admin-controls">
+          <button class="submit-btn" onclick="openAddTemplateForm()">➕ Add Template</button>
         </div>
-    </footer>
+        <div id="addTemplateForm" class="add-template-form" style="display:none">
+          <h3>Add / Edit Template</h3>
+          <input type="hidden" id="editTemplateId">
+          <div class="form-group"><label>Name</label><input type="text" id="tplName" placeholder="Template name"></div>
+          <div class="form-group"><label>Description</label><input type="text" id="tplDesc" placeholder="Description"></div>
+          <div class="form-group"><label>Price (DA)</label><input type="number" id="tplPrice" placeholder="3000"></div>
+          <div class="form-group">
+            <label>Package</label>
+            <select id="tplPackage"><option>Basic</option><option>Premium</option><option>Luxury</option></select>
+          </div>
+          <div class="form-group">
+            <label>Image — Upload File</label>
+            <input type="file" id="tplImageFile" accept="image/*">
+            <div id="uploadProgress" style="display:none;margin-top:.5rem;color:#ec4899">Uploading...</div>
+          </div>
+          <div class="form-group">
+            <label>— or paste Image URL —</label>
+            <input type="text" id="tplImageUrl" placeholder="https://...">
+          </div>
+          <div style="display:flex;gap:1rem;margin-top:1rem">
+            <button class="submit-btn" onclick="saveTemplate()">💾 Save</button>
+            <button class="submit-btn danger" onclick="closeAddTemplateForm()">Cancel</button>
+          </div>
+        </div>
+        <div id="templatesList" class="templates-admin-list"></div>
+      </div>
 
-    <script src="app.js"></script>
+      <!-- ── Analytics tab ── -->
+      <div id="tab-analytics" class="tab-pane" style="display:none">
+        <div class="analytics-grid" id="analyticsGrid"></div>
+        <div class="chart-container">
+          <h3>Requests Over Time</h3>
+          <canvas id="monthlyChart" height="200"></canvas>
+        </div>
+        <div class="chart-container">
+          <h3>Top Templates</h3>
+          <div id="topTemplatesChart"></div>
+        </div>
+      </div>
+
+      <!-- ── Reviews tab ── -->
+      <div id="tab-reviews" class="tab-pane" style="display:none">
+        <div id="adminReviewsList"></div>
+      </div>
+
+    </div><!-- /adminDashboard -->
+  </div>
+</div>
+
+<!-- ═══ FOOTER ════════════════════════════════════════════════════════════════ -->
+<footer class="footer">
+  <div class="container">
+    <p>© 2026 Wedding Invitations. All rights reserved.</p>
+  </div>
+</footer>
+
+<script src="app.js"></script>
 </body>
 </html>

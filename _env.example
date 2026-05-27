@@ -1,14 +1,23 @@
-# Server Configuration
+# ─── Server ───────────────────────────────────────────────────────
 PORT=3000
 NODE_ENV=production
 
-# Admin Security
+# ─── Admin ────────────────────────────────────────────────────────
 ADMIN_KEY=your-super-secret-admin-key-change-this
 
-# Email Configuration (Optional)
-ADMIN_EMAIL=admin@example.com
-EMAIL_USER=your-email@gmail.com
-EMAIL_PASSWORD=your-app-specific-password
+# ─── MongoDB Atlas ────────────────────────────────────────────────
+MONGODB_URI=mongodb+srv://USER:PASSWORD@cluster.mongodb.net/wedding-invitations
 
-# Database
-DATABASE_PATH=./data/invitations.db
+# ─── WhatsApp Notifications (Feature 1) ──────────────────────────
+# 1. Send a WhatsApp message to +34 644 59 84 93 saying: "I allow callmebot to send me messages"
+# 2. You will receive your apikey back via WhatsApp
+# 3. Fill in your number (international format, no + sign) and the key:
+WHATSAPP_PHONE=213XXXXXXXXX
+WHATSAPP_APIKEY=your-callmebot-apikey
+
+# ─── Email Status Notifications (Feature 6) ──────────────────────
+# Use a Gmail App Password (not your regular Gmail password)
+# https://myaccount.google.com/apppasswords
+ADMIN_EMAIL=your-email@gmail.com
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASSWORD=your-16-char-app-password
