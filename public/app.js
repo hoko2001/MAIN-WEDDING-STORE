@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════
-//  i18n — Feature 8: Arabic / French / English
+//  i18n — Arabic / French / English
 // ═══════════════════════════════════════════════════════════════════
 const TRANSLATIONS = {
   en: {
@@ -9,7 +9,6 @@ const TRANSLATIONS = {
     hero_subtitle:'Browse our collection of stunning wedding invitation templates.',
     search_placeholder:'Search invitations by name or style...',
     filter_all:'All',
-    stat_total:'Total Requests', stat_pending:'Pending', stat_completed:'Completed', stat_revenue:'Revenue (DA)',
     gallery_title:'All Templates',
     reviews_title:'⭐ Client Reviews', reviews_sub:'What our happy couples say',
     leave_review:'✍️ Leave a Review',
@@ -30,7 +29,6 @@ const TRANSLATIONS = {
     hero_subtitle:'Parcourez notre collection de magnifiques modèles d\'invitations de mariage.',
     search_placeholder:'Rechercher par nom ou style...',
     filter_all:'Tous',
-    stat_total:'Total Demandes', stat_pending:'En attente', stat_completed:'Terminées', stat_revenue:'Revenu (DA)',
     gallery_title:'Tous les Modèles',
     reviews_title:'⭐ Avis Clients', reviews_sub:'Ce que disent nos couples',
     leave_review:'✍️ Laisser un Avis',
@@ -51,7 +49,6 @@ const TRANSLATIONS = {
     hero_subtitle:'تصفح مجموعتنا من قوالب دعوات الزفاف الرائعة.',
     search_placeholder:'ابحث بالاسم أو النمط...',
     filter_all:'الكل',
-    stat_total:'إجمالي الطلبات', stat_pending:'قيد الانتظار', stat_completed:'مكتملة', stat_revenue:'الإيرادات (دج)',
     gallery_title:'جميع القوالب',
     reviews_title:'⭐ آراء العملاء', reviews_sub:'ما يقوله أزواجنا السعداء',
     leave_review:'✍️ اترك تقييماً',
@@ -86,20 +83,70 @@ function setLang(lang) {
 // ═══════════════════════════════════════════════════════════════════
 //  State
 // ═══════════════════════════════════════════════════════════════════
-let allInvitations  = [];
-let adminKey        = null;
-let allRequests     = [];
-let currentPackage  = 'all';
-let currentStatus   = 'all';
-let selectedRating  = 0;
-let sortPopular     = false;
-let favorites       = JSON.parse(localStorage.getItem('weddingFavorites') || '[]');
-let lightboxIndex   = 0;
-let lightboxList    = [];
+let allInvitations     = [];
+let adminKey           = null;
+let allRequests        = [];
+let currentPackage     = 'all';
+let currentStatus      = 'all';
+let selectedRating     = 0;
+let sortPopular        = false;
+let favorites          = JSON.parse(localStorage.getItem('weddingFavorites') || '[]');
+let lightboxIndex      = 0;
+let lightboxList       = [];
 let selectedRequestIds = new Set();
 let calYear, calMonth;
-let lastTrackingCode = '';
-let deferredPwaPrompt = null;
+let lastTrackingCode   = '';
+let deferredPwaPrompt  = null;
+let confirmResolve     = null; // for custom confirm dialog
+
+// ═══════════════════════════════════════════════════════════════════
+//  Admin API helper — sends key in header, never in URL
+// ═══════════════════════════════════════════════════════════════════
+function adminFetch(url, options = {}) {
+  return fetch(url, {
+    ...options,
+    headers: {
+      'x-admin-key': adminKey,
+      ...(options.headers || {})
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Custom confirm dialog (replaces window.confirm())
+// ═══════════════════════════════════════════════════════════════════
+function showConfirm(title, msg, icon = '⚠️', okLabel = 'Confirm') {
+  return new Promise(resolve => {
+    confirmResolve = resolve;
+    document.getElementById('confirmIcon').textContent  = icon;
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMsg').textContent   = msg;
+    document.getElementById('confirmOkBtn').textContent = okLabel;
+    document.getElementById('confirmDialog').classList.add('active');
+    document.body.style.overflow = 'hidden';
+  });
+}
+
+function resolveConfirm(result) {
+  document.getElementById('confirmDialog').classList.remove('active');
+  document.body.style.overflow = '';
+  if (confirmResolve) { confirmResolve(result); confirmResolve = null; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Toast notification (replaces alert())
+// ═══════════════════════════════════════════════════════════════════
+function showToast(msg, type = 'info') {
+  const existing = document.getElementById('toastEl');
+  if (existing) existing.remove();
+  const t = document.createElement('div');
+  t.id = 'toastEl';
+  t.className = `toast toast-${type}`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add('toast-show'), 10);
+  setTimeout(() => { t.classList.remove('toast-show'); setTimeout(() => t.remove(), 400); }, 3500);
+}
 
 // ═══════════════════════════════════════════════════════════════════
 //  Init
@@ -111,7 +158,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadInvitations();
   loadReviews();
-  loadAnalyticsBanner();
+  loadPublicStats();
   setupEventListeners();
   setupStarPicker();
   updateFavFab();
@@ -124,23 +171,26 @@ function setupEventListeners() {
   document.getElementById('searchInput').addEventListener('input', () => applyFilters());
   document.getElementById('requestForm').addEventListener('submit', submitRequest);
   document.getElementById('reviewForm').addEventListener('submit', submitReview);
-  // Close lightbox on backdrop click
   document.getElementById('lightbox').addEventListener('click', e => {
     if (e.target === document.getElementById('lightbox')) closeLightbox();
+  });
+  // Admin key input — submit on Enter
+  document.getElementById('adminKey').addEventListener('keydown', e => {
+    if (e.key === 'Enter') loginAdmin();
   });
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Analytics banner (public)
+//  Public stats — SAFE, no business secrets
+//  Only shows: happy couples (completed), templates, approved reviews
 // ═══════════════════════════════════════════════════════════════════
-async function loadAnalyticsBanner() {
+async function loadPublicStats() {
   try {
-    const r = await fetch('/api/analytics/summary');
+    const r = await fetch('/api/public/stats');
     const d = await r.json();
-    document.getElementById('statTotal').textContent     = d.total     || 0;
-    document.getElementById('statPending').textContent   = d.pending   || 0;
-    document.getElementById('statCompleted').textContent = d.completed || 0;
-    document.getElementById('statRevenue').textContent   = (d.revenue  || 0).toLocaleString();
+    document.getElementById('statCompleted').textContent = (d.completed || 0).toLocaleString() + '+';
+    document.getElementById('statTemplates').textContent = d.templates || 0;
+    document.getElementById('statReviews').textContent   = d.reviews   || 0;
   } catch {}
 }
 
@@ -152,7 +202,6 @@ async function loadInvitations() {
     const url = sortPopular ? '/api/invitations?sort=popular' : '/api/invitations';
     const r = await fetch(url);
     allInvitations = await r.json();
-    // Build lightbox list
     lightboxList = allInvitations.filter(i => i.image_url);
     applyFilters();
     populateInvitationSelect();
@@ -166,7 +215,7 @@ function applyFilters() {
   const q = document.getElementById('searchInput').value.toLowerCase();
   let list = allInvitations;
   if (currentPackage !== 'all') list = list.filter(i => i.package === currentPackage);
-  if (q) list = list.filter(i => i.name.toLowerCase().includes(q) || i.description.toLowerCase().includes(q));
+  if (q) list = list.filter(i => i.name.toLowerCase().includes(q) || (i.description||'').toLowerCase().includes(q));
   renderGallery(list);
 }
 
@@ -177,7 +226,6 @@ function filterByPackage(pkg, btn) {
   applyFilters();
 }
 
-// Feature #12: toggle popular sort
 function togglePopularSort(btn) {
   sortPopular = !sortPopular;
   btn.classList.toggle('active', sortPopular);
@@ -195,13 +243,13 @@ function renderGallery(invitations) {
     count.textContent = '0 templates available';
     return;
   }
-  invitations.forEach((inv, idx) => {
-    const id       = inv._id || inv.id;
-    const price    = inv.price ? `<span class="price-tag">${Number(inv.price).toLocaleString()} DA</span>` : '';
-    const badge    = `<span class="pkg-badge ${PKG_BADGE[inv.package]||''}">${inv.package||'Basic'}</span>`;
-    const isFav    = favorites.includes(id);
-    const popular  = inv.order_count > 0 ? `<span class="popular-badge">🔥 ${inv.order_count} orders</span>` : '';
-    const card     = document.createElement('div');
+  invitations.forEach(inv => {
+    const id      = inv._id || inv.id;
+    const price   = inv.price ? `<span class="price-tag">${Number(inv.price).toLocaleString()} DA</span>` : '';
+    const badge   = `<span class="pkg-badge ${PKG_BADGE[inv.package]||''}">${inv.package||'Basic'}</span>`;
+    const isFav   = favorites.includes(id);
+    const popular = inv.order_count > 0 ? `<span class="popular-badge">🔥 ${inv.order_count} orders</span>` : '';
+    const card    = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `
       <div class="card-image" onclick="openLightbox('${id}')">
@@ -257,7 +305,7 @@ function updatePriceSummary() {
   const price = opt?.dataset?.price;
   const box   = document.getElementById('priceSummary');
   if (price && price > 0) {
-    box.innerHTML  = `<div class="price-box">💰 Price: <strong>${Number(price).toLocaleString()} DA</strong></div>`;
+    box.innerHTML     = `<div class="price-box">💰 Price: <strong>${Number(price).toLocaleString()} DA</strong></div>`;
     box.style.display = 'block';
   } else {
     box.style.display = 'none';
@@ -265,7 +313,7 @@ function updatePriceSummary() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Feature #4 — Lightbox
+//  Lightbox
 // ═══════════════════════════════════════════════════════════════════
 function openLightbox(invId) {
   const idx = lightboxList.findIndex(i => (i._id||i.id) === invId);
@@ -294,14 +342,18 @@ function closeLightbox() {
 }
 
 document.addEventListener('keydown', e => {
-  if (!document.getElementById('lightbox').classList.contains('active')) return;
-  if (e.key === 'ArrowRight') lightboxNav(1);
-  if (e.key === 'ArrowLeft')  lightboxNav(-1);
-  if (e.key === 'Escape')     closeLightbox();
+  if (document.getElementById('lightbox').classList.contains('active')) {
+    if (e.key === 'ArrowRight') lightboxNav(1);
+    if (e.key === 'ArrowLeft')  lightboxNav(-1);
+    if (e.key === 'Escape')     closeLightbox();
+  }
+  if (e.key === 'Escape' && document.getElementById('adminModal').classList.contains('active')) {
+    closeAdminPanel();
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════════
-//  Feature #3 — Favorites
+//  Favorites
 // ═══════════════════════════════════════════════════════════════════
 function toggleFavorite(e, id) {
   e.stopPropagation();
@@ -324,7 +376,7 @@ function updateFavFab() {
 }
 
 function openFavoritesPanel() {
-  const list  = document.getElementById('favList');
+  const list    = document.getElementById('favList');
   const favInvs = allInvitations.filter(i => favorites.includes(i._id||i.id));
   if (!favInvs.length) { list.innerHTML = '<p style="padding:1rem;color:#94a3b8">No favorites yet</p>'; }
   else {
@@ -348,9 +400,9 @@ function closeFavoritesPanel() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Feature #15 — Sample preview
+//  Sample preview
 // ═══════════════════════════════════════════════════════════════════
-async function openSampleModal(invId) {
+function openSampleModal(invId) {
   const inv = allInvitations.find(i => (i._id||i.id) === invId);
   if (!inv) return;
   document.getElementById('sampleModalName').textContent = inv.name;
@@ -384,7 +436,7 @@ function openRequestModal(invId) {
 function closeRequestModal() {
   document.getElementById('requestModal').classList.remove('active');
   document.getElementById('requestForm').reset();
-  document.getElementById('priceSummary').style.display = 'none';
+  document.getElementById('priceSummary').style.display  = 'none';
   document.getElementById('selectedTemplateInfo').innerHTML = '';
   document.body.style.overflow = 'auto';
 }
@@ -414,7 +466,7 @@ async function submitRequest(e) {
   const wd      = document.getElementById('weddingDate').value;
   const nt      = document.getElementById('notes').value;
 
-  if (!invId||!fn||!ln||!ph||!wd) { alert('Please fill in all required fields'); return; }
+  if (!invId||!fn||!ln||!ph||!wd) { showToast('Please fill in all required fields', 'error'); return; }
 
   try {
     const r = await fetch('/api/requests', {
@@ -424,23 +476,22 @@ async function submitRequest(e) {
     const d = await r.json();
     if (r.ok) {
       closeRequestModal();
-      // Feature #5: show tracking code
       lastTrackingCode = d.tracking_id || '';
       if (d.tracking_id) {
         document.getElementById('trackingInfo').style.display = 'block';
-        document.getElementById('trackingCode').textContent = d.tracking_id;
+        document.getElementById('trackingCode').textContent   = d.tracking_id;
       }
       document.getElementById('successModal').classList.add('active');
       document.body.style.overflow = 'hidden';
       setTimeout(closeSuccessModal, 8000);
-      loadAnalyticsBanner();
-      loadInvitations(); // refresh order counts
-    } else { alert('Error: ' + d.error); }
-  } catch { alert('Error submitting request'); }
+      loadPublicStats();
+      loadInvitations();
+    } else { showToast('Error: ' + d.error, 'error'); }
+  } catch { showToast('Error submitting request', 'error'); }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Feature #5 — Order Tracker (public)
+//  Order Tracker (public)
 // ═══════════════════════════════════════════════════════════════════
 function checkTrackRoute() {
   const match = window.location.pathname.match(/^\/track\/([A-Z0-9]+)$/i);
@@ -465,16 +516,13 @@ function closeTrackModal() {
 
 async function doTrack() {
   const code = document.getElementById('trackInput').value.trim().toUpperCase();
-  if (!code) { alert('Enter a tracking code'); return; }
+  if (!code) { showToast('Enter a tracking code', 'error'); return; }
   const resultEl = document.getElementById('trackResult');
   resultEl.style.display = 'block';
   resultEl.innerHTML = '<p style="color:#94a3b8">Searching...</p>';
   try {
     const r = await fetch(`/api/track/${code}`);
-    if (!r.ok) {
-      resultEl.innerHTML = '<p style="color:#ef4444">❌ Order not found. Check the code and try again.</p>';
-      return;
-    }
+    if (!r.ok) { resultEl.innerHTML = '<p style="color:#ef4444">❌ Order not found. Check the code and try again.</p>'; return; }
     const d = await r.json();
     const steps = ['pending','in_progress','completed'];
     const stepLabels = { pending:'Received', in_progress:'In Progress', completed:'Ready!' };
@@ -494,13 +542,11 @@ async function doTrack() {
         </div>
         <div class="track-status status-${d.status}">${(d.status||'').replace('_',' ')}</div>
       </div>`;
-  } catch {
-    resultEl.innerHTML = '<p style="color:#ef4444">Error checking order. Try again.</p>';
-  }
+  } catch { resultEl.innerHTML = '<p style="color:#ef4444">Error checking order. Try again.</p>'; }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Reviews (Feature 4 original)
+//  Reviews
 // ═══════════════════════════════════════════════════════════════════
 async function loadReviews() {
   try {
@@ -521,7 +567,11 @@ function setupStarPicker() {
   const stars = document.querySelectorAll('#starPicker .star');
   stars.forEach(s => {
     s.addEventListener('mouseover', () => highlightStars(+s.dataset.v));
-    s.addEventListener('click',     () => { selectedRating = +s.dataset.v; highlightStars(selectedRating); document.getElementById('reviewRating').value = selectedRating; });
+    s.addEventListener('click', () => {
+      selectedRating = +s.dataset.v;
+      highlightStars(selectedRating);
+      document.getElementById('reviewRating').value = selectedRating;
+    });
   });
   document.getElementById('starPicker').addEventListener('mouseleave', () => highlightStars(selectedRating));
 }
@@ -531,67 +581,93 @@ function highlightStars(n) {
 }
 
 function openReviewModal()  { document.getElementById('reviewModal').classList.add('active'); document.body.style.overflow='hidden'; }
-function closeReviewModal() { document.getElementById('reviewModal').classList.remove('active'); document.getElementById('reviewForm').reset(); selectedRating=0; highlightStars(0); document.body.style.overflow='auto'; }
+function closeReviewModal() {
+  document.getElementById('reviewModal').classList.remove('active');
+  document.getElementById('reviewForm').reset();
+  selectedRating=0; highlightStars(0);
+  document.body.style.overflow='auto';
+}
 
 async function submitReview(e) {
   e.preventDefault();
-  const name   = document.getElementById('reviewName').value;
-  const tplSel = document.getElementById('reviewTemplate');
-  const tplId  = tplSel.value;
-  const tplNm  = tplSel.options[tplSel.selectedIndex]?.textContent;
-  const rating = +document.getElementById('reviewRating').value;
-  const comment= document.getElementById('reviewComment').value;
-  if (!name||!rating) { alert('Please provide name and rating'); return; }
+  const name    = document.getElementById('reviewName').value;
+  const tplSel  = document.getElementById('reviewTemplate');
+  const tplId   = tplSel.value;
+  const tplNm   = tplSel.options[tplSel.selectedIndex]?.textContent;
+  const rating  = +document.getElementById('reviewRating').value;
+  const comment = document.getElementById('reviewComment').value;
+  if (!name||!rating) { showToast('Please provide name and rating', 'error'); return; }
   try {
     const r = await fetch('/api/reviews', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ invitation_id:tplId||null, invitation_name:tplNm||'', client_name:name, rating, comment })
     });
-    if (r.ok) { closeReviewModal(); alert('Thank you for your review! It will appear after approval.'); }
-  } catch { alert('Error submitting review'); }
+    if (r.ok) { closeReviewModal(); showToast('Thank you! Your review will appear after approval.', 'success'); }
+  } catch { showToast('Error submitting review', 'error'); }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Admin
+//  Admin — Auth
 // ═══════════════════════════════════════════════════════════════════
-function openAdminPanel() { document.getElementById('adminModal').classList.add('active'); document.body.style.overflow='hidden'; }
-function closeAdminPanel() { document.getElementById('adminModal').classList.remove('active'); document.body.style.overflow='auto'; adminKey=null; }
-
-async function loginAdmin() {
-  const key = document.getElementById('adminKey').value.trim();
-  if (!key) { alert('Enter admin key'); return; }
-  try {
-    const r = await fetch(`/api/admin/requests?key=${encodeURIComponent(key)}`);
-    if (r.ok) {
-      adminKey = key;
-      document.getElementById('adminLogin').style.display     = 'none';
-      document.getElementById('adminDashboard').style.display = 'block';
-      loadAdminRequests();
-    } else { alert('Invalid admin key'); }
-  } catch { alert('Connection error'); }
+function openAdminPanel() {
+  document.getElementById('adminModal').classList.add('active');
+  document.body.style.overflow = 'hidden';
 }
 
-function logoutAdmin() {
+function closeAdminPanel() {
+  document.getElementById('adminModal').classList.remove('active');
+  document.body.style.overflow = 'auto';
   adminKey = null;
-  document.getElementById('adminLogin').style.display     = 'block';
+  document.getElementById('adminLogin').style.display     = 'flex';
   document.getElementById('adminDashboard').style.display = 'none';
   document.getElementById('adminKey').value = '';
 }
 
-// ── Tabs ──────────────────────────────────────────────────────────
-function switchTab(name, btn) {
-  document.querySelectorAll('.tab-pane').forEach(p => p.style.display='none');
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+async function loginAdmin() {
+  const key = document.getElementById('adminKey').value.trim();
+  if (!key) { showToast('Enter admin key', 'error'); return; }
+  try {
+    // Verify key using header auth
+    const r = await fetch('/api/admin/requests', { headers: { 'x-admin-key': key } });
+    if (r.ok) {
+      adminKey = key;
+      document.getElementById('adminLogin').style.display     = 'none';
+      document.getElementById('adminDashboard').style.display = 'flex';
+      // Load requests tab by default
+      allRequests = await r.json();
+      renderRequests();
+      updateOrdersSubtitle();
+      updatePendingBadge();
+    } else { showToast('Invalid admin key', 'error'); }
+  } catch { showToast('Connection error', 'error'); }
+}
+
+function logoutAdmin() {
+  adminKey = null;
+  allRequests = [];
+  document.getElementById('adminLogin').style.display     = 'flex';
+  document.getElementById('adminDashboard').style.display = 'none';
+  document.getElementById('adminKey').value = '';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Admin — Tab switching
+// ═══════════════════════════════════════════════════════════════════
+function switchAdminTab(name, btn) {
+  document.querySelectorAll('.admin-tab-pane').forEach(p => p.style.display='none');
+  document.querySelectorAll('.admin-nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-'+name).style.display = 'block';
   btn.classList.add('active');
   if (name==='requests')  loadAdminRequests();
   if (name==='templates') loadAdminTemplates();
   if (name==='analytics') loadAdminAnalytics();
+  if (name==='calendar')  { loadAdminRequests().then(() => renderCalendar()); }
   if (name==='reviews')   loadAdminReviews();
-  if (name==='calendar')  renderCalendar();
 }
 
-// ── Requests tab ──────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  Admin — Requests tab
+// ═══════════════════════════════════════════════════════════════════
 function filterRequests(status, btn) {
   currentStatus = status;
   document.querySelectorAll('.status-filter .filter-btn').forEach(b=>b.classList.remove('active'));
@@ -599,22 +675,22 @@ function filterRequests(status, btn) {
   selectedRequestIds.clear();
   updateBulkBar();
   renderRequests();
+  syncSelectAllCheckbox();
 }
 
 function renderRequests() {
   const list = currentStatus==='all' ? allRequests : allRequests.filter(r=>r.status===currentStatus);
   const el   = document.getElementById('requestsList');
-  if (!list.length) { el.innerHTML='<p style="text-align:center;color:#475569">No requests</p>'; return; }
+  if (!list.length) { el.innerHTML='<p style="text-align:center;color:#475569;padding:2rem">No orders found</p>'; return; }
   const statusOpts = ['pending','in_progress','completed','archived'];
   el.innerHTML = list.map(req => {
-    const id = req._id||req.id;
-    const opts = statusOpts.map(s=>`<option value="${s}" ${req.status===s?'selected':''}>${s.replace('_',' ')}</option>`).join('');
+    const id      = req._id||req.id;
+    const opts    = statusOpts.map(s=>`<option value="${s}" ${req.status===s?'selected':''}>${s.replace('_',' ')}</option>`).join('');
     const isChecked = selectedRequestIds.has(id);
-    const waLink = `https://wa.me/${req.phone_number.replace(/\D/g,'')}?text=${encodeURIComponent(`Hello ${req.first_name}! Your invitation "${req.invitation_name}" update:`)}`;
+    const waLink  = `https://wa.me/${req.phone_number.replace(/\D/g,'')}?text=${encodeURIComponent(`Hello ${req.first_name}! Your invitation "${req.invitation_name}" update:`)}`;
     return `
     <div class="request-item ${isChecked?'request-selected':''}">
       <div class="request-header">
-        <!-- Feature #9: checkbox -->
         <input type="checkbox" class="bulk-checkbox" ${isChecked?'checked':''} onchange="toggleBulkSelect('${id}',this.checked)" title="Select for bulk action">
         <h3>${req.first_name} ${req.last_name}</h3>
         <span class="status-chip status-${req.status}">${req.status.replace('_',' ')}</span>
@@ -628,7 +704,6 @@ function renderRequests() {
         <div><strong>🔗</strong> ${req.tracking_id||'—'}</div>
         ${req.notes?`<div style="grid-column:1/-1"><strong>📝</strong> ${req.notes}</div>`:''}
       </div>
-      <!-- Feature #10: Admin notes -->
       <div class="admin-note-wrap">
         <textarea class="admin-note-input" id="anote-${id}" placeholder="Internal notes (not visible to client)...">${req.admin_notes||''}</textarea>
         <button class="small-btn" onclick="saveAdminNote('${id}')">💾 Save Note</button>
@@ -636,110 +711,179 @@ function renderRequests() {
       <div class="request-status">
         <select id="status-${id}">${opts}</select>
         <button onclick="updateRequestStatus('${id}')">Update</button>
-        <!-- Feature #8: WhatsApp quick reply -->
         <a href="${waLink}" target="_blank" class="small-btn wa-btn">💬 WhatsApp</a>
-        <button class="danger-btn" onclick="deleteRequest('${id}')">Delete</button>
+        <button class="danger-btn" onclick="deleteRequest('${id}')">🗑 Delete</button>
       </div>
     </div>`;
   }).join('');
 }
 
-// Feature #9: bulk select
+function updateOrdersSubtitle() {
+  const total   = allRequests.length;
+  const pending = allRequests.filter(r=>r.status==='pending').length;
+  document.getElementById('ordersSubtitle').textContent = `${total} total • ${pending} pending`;
+}
+
+function updatePendingBadge() {
+  const pending = allRequests.filter(r=>r.status==='pending').length;
+  const badge   = document.getElementById('pendingBadge');
+  if (pending > 0) { badge.textContent = pending; badge.style.display = 'inline'; }
+  else             { badge.style.display = 'none'; }
+}
+
+// Bulk selection
 function toggleBulkSelect(id, checked) {
   if (checked) selectedRequestIds.add(id);
   else selectedRequestIds.delete(id);
   updateBulkBar();
-  // Update row highlight
   document.querySelectorAll('.request-item').forEach(el => {
     const cb = el.querySelector('.bulk-checkbox');
     if (cb) el.classList.toggle('request-selected', cb.checked);
   });
+  syncSelectAllCheckbox();
+}
+
+function toggleSelectAll(checked) {
+  const visible = currentStatus==='all' ? allRequests : allRequests.filter(r=>r.status===currentStatus);
+  visible.forEach(r => {
+    const id = r._id||r.id;
+    if (checked) selectedRequestIds.add(id);
+    else selectedRequestIds.delete(id);
+  });
+  updateBulkBar();
+  renderRequests(); // re-render to reflect checked state
+}
+
+function syncSelectAllCheckbox() {
+  const visible = currentStatus==='all' ? allRequests : allRequests.filter(r=>r.status===currentStatus);
+  const cb = document.getElementById('selectAllCheck');
+  if (!cb) return;
+  if (visible.length === 0) { cb.checked = false; cb.indeterminate = false; return; }
+  const selectedVisible = visible.filter(r => selectedRequestIds.has(r._id||r.id)).length;
+  if (selectedVisible === 0)              { cb.checked = false; cb.indeterminate = false; }
+  else if (selectedVisible === visible.length) { cb.checked = true;  cb.indeterminate = false; }
+  else                                    { cb.checked = false; cb.indeterminate = true;  }
 }
 
 function updateBulkBar() {
   const bar = document.getElementById('bulkBar');
-  const n = selectedRequestIds.size;
+  const n   = selectedRequestIds.size;
   bar.style.display = n > 0 ? 'flex' : 'none';
-  document.getElementById('bulkCount').textContent = `${n} selected`;
+  document.getElementById('bulkCount').textContent = `${n} order${n===1?'':'s'} selected`;
 }
 
 async function applyBulkStatus() {
   const status = document.getElementById('bulkStatusSel').value;
-  const ids = [...selectedRequestIds];
+  const ids    = [...selectedRequestIds];
   if (!ids.length) return;
-  if (!confirm(`Set ${ids.length} requests to "${status}"?`)) return;
+  const ok = await showConfirm('Update Status', `Set ${ids.length} order${ids.length===1?'':'s'} to "${status.replace('_',' ')}"?`, '📋', 'Update');
+  if (!ok) return;
   try {
-    const r = await fetch(`/api/admin/requests/bulk?key=${encodeURIComponent(adminKey)}`, {
+    const r = await adminFetch('/api/admin/requests/bulk', {
       method:'PUT', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ ids, status })
     });
-    if (r.ok) { selectedRequestIds.clear(); updateBulkBar(); loadAdminRequests(); loadAnalyticsBanner(); }
-    else alert('Bulk update failed');
-  } catch { alert('Error'); }
+    if (r.ok) {
+      selectedRequestIds.clear();
+      updateBulkBar();
+      await loadAdminRequests();
+      showToast(`${ids.length} order${ids.length===1?'':'s'} updated`, 'success');
+    } else { showToast('Bulk update failed', 'error'); }
+  } catch { showToast('Error', 'error'); }
+}
+
+async function confirmBulkDelete() {
+  const ids = [...selectedRequestIds];
+  if (!ids.length) return;
+  const ok = await showConfirm('Delete Orders', `Permanently delete ${ids.length} order${ids.length===1?'':'s'}? This cannot be undone.`, '🗑️', '🗑 Delete');
+  if (!ok) return;
+  try {
+    const r = await adminFetch('/api/admin/requests/bulk', {
+      method:'DELETE', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ ids })
+    });
+    if (r.ok) {
+      const d = await r.json();
+      selectedRequestIds.clear();
+      updateBulkBar();
+      await loadAdminRequests();
+      showToast(`${d.deleted} order${d.deleted===1?'':'s'} deleted`, 'success');
+    } else { showToast('Bulk delete failed', 'error'); }
+  } catch { showToast('Error', 'error'); }
 }
 
 function clearBulkSelection() {
   selectedRequestIds.clear();
   updateBulkBar();
+  document.getElementById('selectAllCheck').checked     = false;
+  document.getElementById('selectAllCheck').indeterminate = false;
   renderRequests();
 }
 
-// Feature #10: save admin note
 async function saveAdminNote(id) {
   const note = document.getElementById(`anote-${id}`).value;
   try {
-    const r = await fetch(`/api/admin/requests/${id}?key=${encodeURIComponent(adminKey)}`, {
+    const r = await adminFetch(`/api/admin/requests/${id}`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ admin_notes: note, status: allRequests.find(r=>(r._id||r.id)===id)?.status })
     });
     if (r.ok) {
-      const btn = document.querySelector(`#anote-${id} + button`);
-      if (btn) { btn.textContent = '✅ Saved'; setTimeout(()=>btn.textContent='💾 Save Note', 2000); }
-      // Update local state
+      showToast('Note saved', 'success');
       const req = allRequests.find(r=>(r._id||r.id)===id);
       if (req) req.admin_notes = note;
     }
-  } catch { alert('Error saving note'); }
+  } catch { showToast('Error saving note', 'error'); }
 }
 
 async function loadAdminRequests() {
   try {
-    const r = await fetch(`/api/admin/requests?key=${encodeURIComponent(adminKey)}`);
+    const r = await adminFetch('/api/admin/requests');
     allRequests = await r.json();
     renderRequests();
-  } catch { alert('Error loading requests'); }
+    updateOrdersSubtitle();
+    updatePendingBadge();
+    syncSelectAllCheckbox();
+  } catch { showToast('Error loading orders', 'error'); }
 }
 
 async function updateRequestStatus(id) {
   const status = document.getElementById(`status-${id}`).value;
   try {
-    const r = await fetch(`/api/admin/requests/${id}?key=${encodeURIComponent(adminKey)}`, {
+    const r = await adminFetch(`/api/admin/requests/${id}`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ status, notify: true })
+      body: JSON.stringify({ status })
     });
-    if (r.ok) { loadAdminRequests(); loadAnalyticsBanner(); }
-    else alert('Error updating status');
-  } catch { alert('Error'); }
+    if (r.ok) { await loadAdminRequests(); showToast('Status updated', 'success'); }
+    else showToast('Error updating status', 'error');
+  } catch { showToast('Error', 'error'); }
 }
 
 async function deleteRequest(id) {
-  if (!confirm('Delete this request?')) return;
+  const req = allRequests.find(r=>(r._id||r.id)===id);
+  const name = req ? `${req.first_name} ${req.last_name}` : 'this order';
+  const ok = await showConfirm('Delete Order', `Delete order from ${name}? This cannot be undone.`, '🗑️', '🗑 Delete');
+  if (!ok) return;
   try {
-    const r = await fetch(`/api/admin/requests/${id}?key=${encodeURIComponent(adminKey)}`, { method:'DELETE' });
-    if (r.ok) { loadAdminRequests(); loadAnalyticsBanner(); }
-  } catch { alert('Error'); }
+    const r = await adminFetch(`/api/admin/requests/${id}`, { method:'DELETE' });
+    if (r.ok) { await loadAdminRequests(); showToast('Order deleted', 'success'); }
+  } catch { showToast('Error', 'error'); }
 }
 
 async function exportCSV() {
   try {
-    const r = await fetch(`/api/admin/requests/export/csv?key=${encodeURIComponent(adminKey)}`);
+    const r = await adminFetch('/api/admin/requests/export/csv');
     const csv = await r.text();
-    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([csv],{type:'text/csv'})), download:`requests-${new Date().toISOString().split('T')[0]}.csv` });
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(new Blob([csv],{type:'text/csv'})),
+      download: `orders-${new Date().toISOString().split('T')[0]}.csv`
+    });
     a.click();
-  } catch { alert('Error exporting'); }
+  } catch { showToast('Error exporting', 'error'); }
 }
 
-// ── Templates tab ──────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  Admin — Templates tab
+// ═══════════════════════════════════════════════════════════════════
 async function loadAdminTemplates() {
   try {
     const r    = await fetch('/api/invitations');
@@ -762,7 +906,7 @@ async function loadAdminTemplates() {
         </div>
       </div>`;
     }).join('');
-  } catch { alert('Error loading templates'); }
+  } catch { showToast('Error loading templates', 'error'); }
 }
 
 function openAddTemplateForm() {
@@ -776,32 +920,30 @@ function closeAddTemplateForm() { document.getElementById('addTemplateForm').sty
 
 async function editTemplate(id) {
   const t = allInvitations.find(i=>(i._id||i.id)===id) || (await (await fetch(`/api/invitations/${id}`)).json());
-  document.getElementById('editTemplateId').value = id;
-  document.getElementById('tplName').value    = t.name||'';
-  document.getElementById('tplDesc').value    = t.description||'';
-  document.getElementById('tplPrice').value   = t.price||0;
-  document.getElementById('tplPackage').value = t.package||'Basic';
-  document.getElementById('tplImageUrl').value= t.image_url||'';
+  document.getElementById('editTemplateId').value  = id;
+  document.getElementById('tplName').value         = t.name||'';
+  document.getElementById('tplDesc').value         = t.description||'';
+  document.getElementById('tplPrice').value        = t.price||0;
+  document.getElementById('tplPackage').value      = t.package||'Basic';
+  document.getElementById('tplImageUrl').value     = t.image_url||'';
   document.getElementById('addTemplateForm').style.display='block';
 }
 
 async function saveTemplate() {
   const editId = document.getElementById('editTemplateId').value;
   let imageUrl = document.getElementById('tplImageUrl').value;
-
   const fileInput = document.getElementById('tplImageFile');
   if (fileInput.files[0]) {
     document.getElementById('uploadProgress').style.display='block';
     const fd = new FormData(); fd.append('image', fileInput.files[0]);
     try {
-      const ur = await fetch(`/api/admin/upload?key=${encodeURIComponent(adminKey)}`, { method:'POST', body:fd });
+      const ur = await adminFetch('/api/admin/upload', { method:'POST', body:fd });
       const ud = await ur.json();
       if (ud.url) { imageUrl = ud.url; fileInput.value=''; }
-      else { alert('Upload failed: '+ud.error); return; }
-    } catch { alert('Upload error'); return; }
+      else { showToast('Upload failed: '+ud.error, 'error'); return; }
+    } catch { showToast('Upload error', 'error'); return; }
     finally { document.getElementById('uploadProgress').style.display='none'; }
   }
-
   const payload = {
     name:        document.getElementById('tplName').value,
     description: document.getElementById('tplDesc').value,
@@ -809,35 +951,37 @@ async function saveTemplate() {
     package:     document.getElementById('tplPackage').value,
     image_url:   imageUrl
   };
-  if (!payload.name) { alert('Name is required'); return; }
-
+  if (!payload.name) { showToast('Name is required', 'error'); return; }
   try {
     const url    = editId ? `/api/admin/invitations/${editId}` : '/api/admin/invitations';
     const method = editId ? 'PUT' : 'POST';
-    const r = await fetch(`${url}?key=${encodeURIComponent(adminKey)}`, {
+    const r = await adminFetch(url, {
       method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
     });
-    if (r.ok) { closeAddTemplateForm(); loadAdminTemplates(); loadInvitations(); }
-    else { const d=await r.json(); alert('Error: '+d.error); }
-  } catch { alert('Error saving template'); }
+    if (r.ok) { closeAddTemplateForm(); loadAdminTemplates(); loadInvitations(); showToast('Template saved', 'success'); }
+    else { const d=await r.json(); showToast('Error: '+d.error, 'error'); }
+  } catch { showToast('Error saving template', 'error'); }
 }
 
 async function deleteTemplate(id) {
-  if (!confirm('Delete this template?')) return;
+  const ok = await showConfirm('Delete Template', 'Delete this template? Orders referencing it will remain intact.', '🗑️', '🗑 Delete');
+  if (!ok) return;
   try {
-    const r = await fetch(`/api/admin/invitations/${id}?key=${encodeURIComponent(adminKey)}`, { method:'DELETE' });
-    if (r.ok) { loadAdminTemplates(); loadInvitations(); }
-  } catch { alert('Error'); }
+    const r = await adminFetch(`/api/admin/invitations/${id}`, { method:'DELETE' });
+    if (r.ok) { loadAdminTemplates(); loadInvitations(); showToast('Template deleted', 'success'); }
+  } catch { showToast('Error', 'error'); }
 }
 
-// ── Analytics tab ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  Admin — Analytics tab (uses admin endpoint, key required)
+// ═══════════════════════════════════════════════════════════════════
 async function loadAdminAnalytics() {
   try {
-    const r = await fetch('/api/analytics/summary');
+    const r = await adminFetch('/api/admin/analytics');
     const d = await r.json();
 
     document.getElementById('analyticsGrid').innerHTML = `
-      <div class="analytics-card"><div class="analytics-num">${d.total||0}</div><div class="analytics-label">Total Requests</div></div>
+      <div class="analytics-card"><div class="analytics-num">${d.total||0}</div><div class="analytics-label">Total Orders</div></div>
       <div class="analytics-card pending"><div class="analytics-num">${d.pending||0}</div><div class="analytics-label">Pending</div></div>
       <div class="analytics-card progress"><div class="analytics-num">${d.inProgress||0}</div><div class="analytics-label">In Progress</div></div>
       <div class="analytics-card done"><div class="analytics-num">${d.completed||0}</div><div class="analytics-label">Completed</div></div>
@@ -852,7 +996,7 @@ async function loadAdminAnalytics() {
     canvas.width = canvas.offsetWidth || 600;
     ctx.clearRect(0,0,canvas.width,canvas.height);
     const barW = canvas.width/(monthly.length||1)-10;
-    monthly.forEach((m,i)=>{
+    monthly.forEach((m,i) => {
       const h = (m.count/maxCount)*(canvas.height-40);
       const x = i*(barW+10)+5;
       const y = canvas.height-h-30;
@@ -864,7 +1008,7 @@ async function loadAdminAnalytics() {
       ctx.fillText(m.count,x+barW/2,y-5);
     });
 
-    const top = d.topTemplates||[];
+    const top  = d.topTemplates||[];
     const maxT = Math.max(...top.map(t=>t.count),1);
     document.getElementById('topTemplatesChart').innerHTML = top.map(t=>`
       <div style="margin-bottom:.75rem">
@@ -875,42 +1019,37 @@ async function loadAdminAnalytics() {
           <div style="background:linear-gradient(to right,#ec4899,#a855f7);height:8px;border-radius:999px;width:${(t.count/maxT*100).toFixed(1)}%"></div>
         </div>
       </div>`).join('');
-  } catch(e) { console.error(e); }
+  } catch(e) { showToast('Error loading analytics', 'error'); console.error(e); }
 }
 
-// ── Feature #11: Calendar tab ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  Admin — Calendar tab
+// ═══════════════════════════════════════════════════════════════════
 function calPrev() { calMonth--; if (calMonth < 0) { calMonth=11; calYear--; } renderCalendar(); }
 function calNext() { calMonth++; if (calMonth > 11) { calMonth=0;  calYear++; } renderCalendar(); }
 
 function renderCalendar() {
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   document.getElementById('calTitle').textContent = `${monthNames[calMonth]} ${calYear}`;
-
-  // Map requests to wedding date
   const dateMap = {};
   allRequests.forEach(req => {
     if (!req.wedding_date) return;
-    const key = req.wedding_date; // YYYY-MM-DD
+    const key = req.wedding_date;
     if (!dateMap[key]) dateMap[key] = [];
     dateMap[key].push(req);
   });
-
-  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const firstDay    = new Date(calYear, calMonth, 1).getDay();
   const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
-  const today = new Date();
-
+  const today       = new Date();
   let html = '<div class="cal-weekdays">';
   ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d => html += `<div class="cal-wd">${d}</div>`);
   html += '</div><div class="cal-days">';
-
-  // Empty cells before first day
   for (let i=0; i<firstDay; i++) html += '<div class="cal-day cal-empty"></div>';
-
   for (let d=1; d<=daysInMonth; d++) {
     const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const dayReqs = dateMap[dateStr] || [];
     const isToday = today.getFullYear()===calYear && today.getMonth()===calMonth && today.getDate()===d;
-    const dots = dayReqs.map(r=>`<span class="cal-dot dot-${r.status}" title="${r.first_name} ${r.last_name} — ${r.invitation_name}"></span>`).join('');
+    const dots    = dayReqs.map(r=>`<span class="cal-dot dot-${r.status}" title="${r.first_name} ${r.last_name} — ${r.invitation_name}"></span>`).join('');
     html += `<div class="cal-day ${isToday?'cal-today':''} ${dayReqs.length?'cal-has-events':''}">
       <span class="cal-day-num">${d}</span>
       <div class="cal-dots">${dots}</div>
@@ -920,13 +1059,15 @@ function renderCalendar() {
   document.getElementById('calGrid').innerHTML = html;
 }
 
-// ── Reviews moderation tab ────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  Admin — Reviews tab
+// ═══════════════════════════════════════════════════════════════════
 async function loadAdminReviews() {
   try {
-    const r  = await fetch(`/api/admin/reviews?key=${encodeURIComponent(adminKey)}`);
+    const r  = await adminFetch('/api/admin/reviews');
     const rv = await r.json();
     const el = document.getElementById('adminReviewsList');
-    if (!rv.length) { el.innerHTML='<p style="text-align:center;color:#475569">No reviews yet</p>'; return; }
+    if (!rv.length) { el.innerHTML='<p style="text-align:center;color:#475569;padding:2rem">No reviews yet</p>'; return; }
     el.innerHTML = rv.map(v => {
       const id = v._id||v.id;
       return `
@@ -947,49 +1088,29 @@ async function loadAdminReviews() {
         <div style="font-size:.75rem;color:#94a3b8;margin-top:.25rem">${new Date(v.created_at).toLocaleDateString()} · ${v.approved?'<span style="color:#22c55e">Approved</span>':'<span style="color:#f59e0b">Pending</span>'}</div>
       </div>`;
     }).join('');
-  } catch { alert('Error loading reviews'); }
+  } catch { showToast('Error loading reviews', 'error'); }
 }
 
 async function moderateReview(id, approved) {
   try {
-    const r = await fetch(`/api/admin/reviews/${id}?key=${encodeURIComponent(adminKey)}`, {
+    const r = await adminFetch(`/api/admin/reviews/${id}`, {
       method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({approved})
     });
-    if (r.ok) { loadAdminReviews(); loadReviews(); }
-  } catch { alert('Error'); }
+    if (r.ok) { loadAdminReviews(); loadReviews(); showToast(approved?'Review approved':'Review hidden', 'success'); }
+  } catch { showToast('Error', 'error'); }
 }
 
 async function deleteReview(id) {
-  if (!confirm('Delete this review?')) return;
+  const ok = await showConfirm('Delete Review', 'Permanently delete this review?', '🗑️', '🗑 Delete');
+  if (!ok) return;
   try {
-    const r = await fetch(`/api/admin/reviews/${id}?key=${encodeURIComponent(adminKey)}`, { method:'DELETE' });
-    if (r.ok) { loadAdminReviews(); loadReviews(); }
-  } catch { alert('Error'); }
+    const r = await adminFetch(`/api/admin/reviews/${id}`, { method:'DELETE' });
+    if (r.ok) { loadAdminReviews(); loadReviews(); showToast('Review deleted', 'success'); }
+  } catch { showToast('Error', 'error'); }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  Feature #17 — Lazy-load via IntersectionObserver
-// ═══════════════════════════════════════════════════════════════════
-function setupLazyLoad() {
-  if (!('IntersectionObserver' in window)) return;
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const img = entry.target;
-        if (img.dataset.src) {
-          img.src = img.dataset.src;
-          img.removeAttribute('data-src');
-          img.classList.add('img-loaded');
-        }
-        observer.unobserve(img);
-      }
-    });
-  }, { rootMargin: '100px' });
-  document.querySelectorAll('img[loading="lazy"]').forEach(img => observer.observe(img));
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  Feature #20 — PWA / Service Worker
+//  Lazy load & PWA
 // ═══════════════════════════════════════════════════════════════════
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
@@ -998,9 +1119,8 @@ function registerServiceWorker() {
 }
 
 function setupPwaInstall() {
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPwaPrompt = e;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault(); deferredPwaPrompt = e;
     document.getElementById('pwaInstallBanner').style.display = 'flex';
   });
   window.addEventListener('appinstalled', () => {
@@ -1018,16 +1138,18 @@ function installPWA() {
   });
 }
 
-function dismissPWA() {
-  document.getElementById('pwaInstallBanner').style.display = 'none';
-}
+function dismissPWA() { document.getElementById('pwaInstallBanner').style.display = 'none'; }
 
-// ── Close modals on backdrop click ───────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  Close modals on backdrop click
+// ═══════════════════════════════════════════════════════════════════
 document.addEventListener('click', e => {
   if (e.target===document.getElementById('requestModal')) closeRequestModal();
   if (e.target===document.getElementById('successModal')) closeSuccessModal();
-  if (e.target===document.getElementById('adminModal'))   closeAdminPanel();
   if (e.target===document.getElementById('reviewModal'))  closeReviewModal();
   if (e.target===document.getElementById('trackModal'))   closeTrackModal();
   if (e.target===document.getElementById('sampleModal'))  closeSampleModal();
+  if (e.target===document.getElementById('confirmDialog')) resolveConfirm(false);
+  // Admin modal backdrop — only close if clicking the fullscreen wrapper
+  if (e.target===document.getElementById('adminModal') && !adminKey) closeAdminPanel();
 });

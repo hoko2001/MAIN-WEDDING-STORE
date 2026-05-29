@@ -20,10 +20,10 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.static(path.join(__dirname)));  // serves manifest.json, sw.js from root
+app.use(express.static(path.join(__dirname)));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ─── Multer (image uploads) ───────────────────────────────────────────────────
+// ─── Multer ───────────────────────────────────────────────────────────────────
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -107,9 +107,10 @@ async function initializeDatabase() {
   } catch (err) { console.error('Seed error:', err); }
 }
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
+// ─── Auth helper — checks Authorization header OR x-admin-key header ONLY ────
+// NEVER accept key via query string (prevents URL history leaks & server logs)
 function checkAdmin(req, res) {
-  const key = req.query.key || req.headers['x-admin-key'];
+  const key = req.headers['x-admin-key'] || req.headers['authorization']?.replace('Bearer ', '');
   if (!key || key !== ADMIN_KEY) {
     res.status(401).json({ error: 'Unauthorized' });
     return false;
@@ -123,12 +124,9 @@ function generateTrackingId() {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-// Feature #12: sort by popularity
 app.get('/api/invitations', async (req, res) => {
   try {
-    const sort = req.query.sort === 'popular'
-      ? { order_count: -1 }
-      : { created_at: -1 };
+    const sort = req.query.sort === 'popular' ? { order_count: -1 } : { created_at: -1 };
     const invitations = await Invitation.find().sort(sort);
     res.json(invitations);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -142,29 +140,26 @@ app.get('/api/invitations/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Feature #15: sample PDF download (watermarked redirect)
 app.get('/api/invitations/:id/sample', async (req, res) => {
   try {
     const inv = await Invitation.findById(req.params.id);
     if (!inv) return res.status(404).json({ error: 'Not found' });
-    // Redirect to image with watermark note; real PDF gen requires puppeteer
     res.json({ sample_url: inv.image_url, name: inv.name, watermark: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Feature #5: public order tracking
+// Public order tracking — returns ONLY safe public fields (no business data)
 app.get('/api/track/:trackingId', async (req, res) => {
   try {
-    const req2 = await Request.findOne({ tracking_id: req.params.trackingId });
-    if (!req2) return res.status(404).json({ error: 'Order not found' });
-    // Return only safe public fields
+    const order = await Request.findOne({ tracking_id: req.params.trackingId });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
     res.json({
-      tracking_id:     req2.tracking_id,
-      first_name:      req2.first_name,
-      invitation_name: req2.invitation_name,
-      wedding_date:    req2.wedding_date,
-      status:          req2.status,
-      created_at:      req2.created_at
+      tracking_id:     order.tracking_id,
+      first_name:      order.first_name,
+      invitation_name: order.invitation_name,
+      wedding_date:    order.wedding_date,
+      status:          order.status,
+      created_at:      order.created_at
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -175,7 +170,6 @@ app.post('/api/requests', async (req, res) => {
     if (!invitation_id || !first_name || !last_name || !phone_number || !wedding_date)
       return res.status(400).json({ error: 'Missing required fields' });
 
-    // Generate unique tracking ID
     let tracking_id, attempts = 0;
     do {
       tracking_id = generateTrackingId();
@@ -184,22 +178,20 @@ app.post('/api/requests', async (req, res) => {
 
     const saved = await new Request({
       invitation_id, invitation_name, first_name, last_name,
-      phone_number, wedding_date, notes: notes||'', price: price||0, tracking_id
+      phone_number, wedding_date, notes, price: price || 0, tracking_id
     }).save();
 
-    // Feature #12: increment order_count
+    // Increment order count on template
     await Invitation.findByIdAndUpdate(invitation_id, { $inc: { order_count: 1 } });
 
-    const siteUrl = process.env.SITE_URL || `http://localhost:${PORT}`;
+    const siteUrl = `${req.protocol}://${req.get('host')}`;
     const trackUrl = `${siteUrl}/track/${tracking_id}`;
-
     console.log('✓ New request saved:', saved._id);
-
     res.json({ success: true, id: saved._id, tracking_id, track_url: trackUrl, message: 'Request submitted successfully' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Reviews — public
+// Reviews — public (approved only)
 app.get('/api/reviews', async (req, res) => {
   try {
     const reviews = await Review.find({ approved: true }).sort({ created_at: -1 }).limit(20);
@@ -216,8 +208,86 @@ app.post('/api/reviews', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Analytics — public summary
-app.get('/api/analytics/summary', async (req, res) => {
+// ─── PUBLIC stats — SAFE for customers to see (no revenue, no pending counts) ─
+// Shows only what builds social proof: completed orders, template count
+app.get('/api/public/stats', async (req, res) => {
+  try {
+    const completed   = await Request.countDocuments({ status: 'completed' });
+    const templates   = await Invitation.countDocuments();
+    const reviews     = await Review.countDocuments({ approved: true });
+    res.json({ completed, templates, reviews });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Admin API (all require x-admin-key header) ───────────────────────────────
+
+app.get('/api/admin/requests/export/csv', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const requests = await Request.find().sort({ created_at: -1 });
+    let csv = 'ID,Tracking ID,First Name,Last Name,Phone,Wedding Date,Invitation,Price,Notes,Admin Notes,Status,Created At\n';
+    requests.forEach(r => {
+      csv += `${r._id},"${r.tracking_id||''}","${r.first_name}","${r.last_name}","${r.phone_number}","${r.wedding_date}","${r.invitation_name}","${r.price||0}","${(r.notes||'').replace(/"/g,'""')}","${(r.admin_notes||'').replace(/"/g,'""')}","${r.status}","${r.created_at}"\n`;
+    });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=requests.csv');
+    res.send(csv);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/admin/requests', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const filter = {};
+    if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
+    const requests = await Request.find(filter).sort({ created_at: -1 });
+    res.json(requests);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Bulk status update
+app.put('/api/admin/requests/bulk', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const { ids, status } = req.body;
+    if (!ids?.length || !status) return res.status(400).json({ error: 'ids and status required' });
+    await Request.updateMany({ _id: { $in: ids } }, { status });
+    res.json({ success: true, updated: ids.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Bulk DELETE — new endpoint
+app.delete('/api/admin/requests/bulk', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const { ids } = req.body;
+    if (!ids?.length) return res.status(400).json({ error: 'ids required' });
+    const result = await Request.deleteMany({ _id: { $in: ids } });
+    res.json({ success: true, deleted: result.deletedCount });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/admin/requests/:id', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    const update = { status: req.body.status };
+    if (req.body.admin_notes !== undefined) update.admin_notes = req.body.admin_notes;
+    const updated = await Request.findByIdAndUpdate(req.params.id, update, { new: true });
+    res.json({ success: true, data: updated });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/admin/requests/:id', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  try {
+    await Request.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin analytics — full data, admin-only
+app.get('/api/admin/analytics', async (req, res) => {
+  if (!checkAdmin(req, res)) return;
   try {
     const total      = await Request.countDocuments();
     const pending    = await Request.countDocuments({ status: 'pending' });
@@ -244,58 +314,6 @@ app.get('/api/analytics/summary', async (req, res) => {
     ]);
 
     res.json({ total, pending, inProgress, completed, revenue, monthly, topTemplates });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ─── Admin API ────────────────────────────────────────────────────────────────
-app.get('/api/admin/requests/export/csv', async (req, res) => {
-  if (!checkAdmin(req, res)) return;
-  try {
-    const requests = await Request.find().sort({ created_at: -1 });
-    let csv = 'ID,Tracking ID,First Name,Last Name,Phone,Wedding Date,Invitation,Price,Notes,Admin Notes,Status,Created At\n';
-    requests.forEach(r => {
-      csv += `${r._id},"${r.tracking_id||''}","${r.first_name}","${r.last_name}","${r.phone_number}","${r.wedding_date}","${r.invitation_name}","${r.price||0}","${r.notes||''}","${r.admin_notes||''}","${r.status}","${r.created_at}"\n`;
-    });
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=requests.csv');
-    res.send(csv);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.get('/api/admin/requests', async (req, res) => {
-  if (!checkAdmin(req, res)) return;
-  try {
-    const requests = await Request.find().sort({ created_at: -1 });
-    res.json(requests);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// Feature #9: bulk status update
-app.put('/api/admin/requests/bulk', async (req, res) => {
-  if (!checkAdmin(req, res)) return;
-  try {
-    const { ids, status } = req.body;
-    if (!ids?.length || !status) return res.status(400).json({ error: 'ids and status required' });
-    await Request.updateMany({ _id: { $in: ids } }, { status });
-    res.json({ success: true, updated: ids.length });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.put('/api/admin/requests/:id', async (req, res) => {
-  if (!checkAdmin(req, res)) return;
-  try {
-    const update = { status: req.body.status };
-    if (req.body.admin_notes !== undefined) update.admin_notes = req.body.admin_notes;
-    const updated = await Request.findByIdAndUpdate(req.params.id, update, { new: true });
-    res.json({ success: true, data: updated });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-app.delete('/api/admin/requests/:id', async (req, res) => {
-  if (!checkAdmin(req, res)) return;
-  try {
-    await Request.findByIdAndDelete(req.params.id);
-    res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -362,7 +380,7 @@ app.delete('/api/admin/reviews/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ─── SPA fallback (also handles /track/:id on client) ────────────────────────
+// ─── SPA fallback ─────────────────────────────────────────────────────────────
 app.get('*', (req, res) => {
   const idx = path.join(__dirname, 'public', 'index.html');
   const idx2 = path.join(__dirname, 'index.html');
