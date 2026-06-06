@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Wedding Invitations</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body class="admin-body">
+
+<!-- ═══ LOGIN SCREEN ══════════════════════════════════════════════════════════ -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="login-logo">🛠️</div>
+    <h1>Admin Panel</h1>
+    <p>Wedding Invitations Management</p>
+    <div class="form-group">
+      <label>Admin Key</label>
+      <input type="password" id="adminKeyInput" placeholder="Enter your admin key" onkeydown="if(event.key==='Enter')loginAdmin()">
+    </div>
+    <button class="btn-primary" onclick="loginAdmin()">Login →</button>
+    <div id="loginError" class="login-error" style="display:none">❌ Invalid admin key</div>
+  </div>
+</div>
+
+<!-- ═══ DASHBOARD ═════════════════════════════════════════════════════════════ -->
+<div id="dashboard" style="display:none">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span>♥</span> Admin
+    </div>
+    <nav class="sidebar-nav">
+      <button class="side-btn active" onclick="switchTab('requests',this)">📋 Requests</button>
+      <button class="side-btn" onclick="switchTab('templates',this)">🎨 Templates</button>
+      <button class="side-btn" onclick="switchTab('analytics',this)">📊 Analytics</button>
+      <button class="side-btn" onclick="switchTab('reviews',this)">⭐ Reviews</button>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="/" class="side-link">← View Website</a>
+      <button class="side-btn-logout" onclick="logoutAdmin()">Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="admin-main">
+
+    <!-- ── Requests ── -->
+    <div id="tab-requests" class="tab-pane">
+      <div class="page-header">
+        <h2>📋 Requests</h2>
+        <button class="btn-primary" onclick="exportCSV()">⬇️ Export CSV</button>
+      </div>
+      <div class="status-filter">
+        <button class="chip active" onclick="filterRequests('all',this)">All</button>
+        <button class="chip" onclick="filterRequests('pending',this)">Pending</button>
+        <button class="chip" onclick="filterRequests('in_progress',this)">In Progress</button>
+        <button class="chip" onclick="filterRequests('completed',this)">Completed</button>
+        <button class="chip" onclick="filterRequests('archived',this)">Archived</button>
+      </div>
+      <div id="requestsList" class="cards-list"></div>
+    </div>
+
+    <!-- ── Templates ── -->
+    <div id="tab-templates" class="tab-pane" style="display:none">
+      <div class="page-header">
+        <h2>🎨 Templates</h2>
+        <button class="btn-primary" onclick="openAddTemplateForm()">➕ Add Template</button>
+      </div>
+      <div id="addTemplateForm" class="form-card" style="display:none">
+        <h3 id="formTitle">Add Template</h3>
+        <input type="hidden" id="editTemplateId">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="tplName" placeholder="Template name">
+          </div>
+          <div class="form-group">
+            <label>Price (DA)</label>
+            <input type="number" id="tplPrice" placeholder="3000">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>Description</label>
+            <input type="text" id="tplDesc" placeholder="Short description">
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>Upload Image</label>
+            <input type="file" id="tplImageFile" accept="image/*">
+            <div id="uploadProgress" style="display:none;color:#ec4899;margin-top:.5rem;font-size:.875rem">⏳ Uploading...</div>
+          </div>
+          <div class="form-group" style="grid-column:1/-1">
+            <label>— or paste Image URL —</label>
+            <input type="text" id="tplImageUrl" placeholder="https://...">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn-primary" onclick="saveTemplate()">💾 Save Template</button>
+          <button class="btn-ghost" onclick="closeAddTemplateForm()">Cancel</button>
+        </div>
+      </div>
+      <div id="templatesList" class="cards-list"></div>
+    </div>
+
+    <!-- ── Analytics ── -->
+    <div id="tab-analytics" class="tab-pane" style="display:none">
+      <div class="page-header"><h2>📊 Analytics</h2></div>
+      <div class="analytics-grid" id="analyticsGrid"></div>
+      <div class="chart-card">
+        <h3>Requests per Month</h3>
+        <canvas id="monthlyChart" height="160"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Top Templates</h3>
+        <div id="topTemplatesChart"></div>
+      </div>
+    </div>
+
+    <!-- ── Reviews ── -->
+    <div id="tab-reviews" class="tab-pane" style="display:none">
+      <div class="page-header"><h2>⭐ Reviews</h2></div>
+      <div id="adminReviewsList" class="cards-list"></div>
+    </div>
+
+  </main>
+</div>
+
+<script src="admin.js"></script>
+</body>
+</html>

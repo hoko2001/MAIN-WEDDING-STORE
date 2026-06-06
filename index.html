@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wedding Invitations — Beautiful Templates</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ec4899">
+</head>
+<body>
+
+<!-- ═══ NAVBAR ═══════════════════════════════════════════════════════════════ -->
+<nav class="navbar">
+  <div class="container">
+    <div class="navbar-content">
+      <div class="logo">
+        <span class="heart">♥</span>
+        <span class="logo-text">Invitations</span>
+      </div>
+      <div class="nav-links">
+        <button class="lang-btn" onclick="setLang('en')">EN</button>
+        <button class="lang-btn" onclick="setLang('fr')">FR</button>
+        <button class="lang-btn" onclick="setLang('ar')">AR</button>
+        <a href="#gallery" class="nav-link" data-i18n="nav_gallery">Gallery</a>
+        <a href="#reviews" class="nav-link" data-i18n="nav_reviews">Reviews</a>
+        <button class="dark-toggle" id="darkToggle" onclick="toggleDark()" title="Toggle dark mode">🌙</button>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ HERO ══════════════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-content">
+      <div class="sparkles">✨ <span data-i18n="hero_badge">BEAUTIFUL INVITATIONS</span> ✨</div>
+      <h1 class="hero-title"><span data-i18n="hero_title">Find Your Perfect</span> <span class="gradient-text">Invitation</span></h1>
+      <p class="hero-subtitle" data-i18n="hero_subtitle">Browse our collection of stunning wedding invitation templates.</p>
+      <div class="search-container">
+        <input type="text" id="searchInput" class="search-bar" data-i18n-placeholder="search_placeholder" placeholder="Search invitations...">
+        <span class="search-icon">🔍</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ GALLERY ═══════════════════════════════════════════════════════════════ -->
+<section id="gallery" class="gallery">
+  <div class="container">
+    <h2 class="section-title" data-i18n="gallery_title">All Templates</h2>
+    <p class="section-sub" id="templateCount">Loading...</p>
+    <div class="gallery-grid" id="galleryGrid"></div>
+  </div>
+</section>
+
+<!-- ═══ REVIEWS ═══════════════════════════════════════════════════════════════ -->
+<section id="reviews" class="reviews-section">
+  <div class="container">
+    <h2 class="section-title" data-i18n="reviews_title">⭐ Client Reviews</h2>
+    <p class="section-sub" data-i18n="reviews_sub">What our happy couples say</p>
+    <div class="reviews-grid" id="reviewsGrid"></div>
+    <div style="text-align:center;margin-top:2rem">
+      <button class="btn-outline" onclick="openReviewModal()" data-i18n="leave_review">✍️ Leave a Review</button>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ REQUEST MODAL ═════════════════════════════════════════════════════════ -->
+<div id="requestModal" class="modal">
+  <div class="modal-content">
+    <button class="modal-close" onclick="closeRequestModal()">×</button>
+    <h2><span data-i18n="modal_title">Request This</span> <span class="gradient-text">Invitation</span></h2>
+    <div id="selectedTemplateInfo" class="template-info-bar"></div>
+    <form id="requestForm" class="form">
+      <div class="form-row">
+        <div class="form-group">
+          <label data-i18n="form_first">First Name</label>
+          <input type="text" id="firstName" required placeholder="First name">
+        </div>
+        <div class="form-group">
+          <label data-i18n="form_last">Last Name</label>
+          <input type="text" id="lastName" required placeholder="Last name">
+        </div>
+      </div>
+      <div class="form-group">
+        <label data-i18n="form_phone">Phone Number</label>
+        <input type="tel" id="phoneNumber" required placeholder="+213...">
+      </div>
+      <div class="form-group">
+        <label data-i18n="form_date">Wedding Date</label>
+        <input type="date" id="weddingDate" required>
+      </div>
+      <div class="form-group">
+        <label data-i18n="form_notes">Special Instructions <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+        <textarea id="notes" placeholder="Any special requests..."></textarea>
+      </div>
+      <button type="submit" class="btn-primary" data-i18n="form_submit">Submit Request</button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══ REVIEW MODAL ══════════════════════════════════════════════════════════ -->
+<div id="reviewModal" class="modal">
+  <div class="modal-content" style="max-width:460px">
+    <button class="modal-close" onclick="closeReviewModal()">×</button>
+    <h2>⭐ <span data-i18n="review_modal_title">Leave a Review</span></h2>
+    <form id="reviewForm" class="form">
+      <div class="form-group">
+        <label data-i18n="review_name">Your Name</label>
+        <input type="text" id="reviewName" required placeholder="Your name">
+      </div>
+      <div class="form-group">
+        <label data-i18n="review_template">Template Used <span style="font-weight:400;color:#94a3b8">(optional)</span></label>
+        <select id="reviewTemplate">
+          <option value="">Select template...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label data-i18n="review_rating">Rating</label>
+        <div class="star-picker" id="starPicker">
+          <span class="star" data-v="1">★</span>
+          <span class="star" data-v="2">★</span>
+          <span class="star" data-v="3">★</span>
+          <span class="star" data-v="4">★</span>
+          <span class="star" data-v="5">★</span>
+        </div>
+        <input type="hidden" id="reviewRating" value="0">
+      </div>
+      <div class="form-group">
+        <label data-i18n="review_comment">Comment</label>
+        <textarea id="reviewComment" placeholder="Tell us about your experience..."></textarea>
+      </div>
+      <button type="submit" class="btn-primary" data-i18n="review_submit">Submit Review</button>
+    </form>
+  </div>
+</div>
+
+<!-- ═══ SUCCESS MODAL ═════════════════════════════════════════════════════════ -->
+<div id="successModal" class="modal">
+  <div class="modal-content success-content">
+    <div class="success-icon">✓</div>
+    <h2 data-i18n="success_title">Request Submitted!</h2>
+    <p data-i18n="success_msg">Thank you! We'll contact you soon.</p>
+    <div id="trackingDisplay" class="tracking-display"></div>
+    <button class="btn-primary" onclick="closeSuccessModal()" data-i18n="close">Close</button>
+  </div>
+</div>
+
+<!-- ═══ FAVORITES DRAWER ══════════════════════════════════════════════════════ -->
+<div id="favDrawer" class="fav-drawer">
+  <div class="fav-drawer-header">
+    <h3>❤️ <span data-i18n="fav_title">My Favorites</span></h3>
+    <button onclick="closeFavDrawer()">×</button>
+  </div>
+  <div id="favList" class="fav-list"></div>
+</div>
+<div id="favOverlay" class="fav-overlay" onclick="closeFavDrawer()"></div>
+
+<!-- Floating favorites button (only shows when there are favorites) -->
+<button id="favBtn" class="fav-float-btn" onclick="openFavDrawer()" style="display:none">
+  ❤️ <span id="favCount">0</span>
+</button>
+
+<!-- ═══ FOOTER ════════════════════════════════════════════════════════════════ -->
+<footer class="footer">
+  <div class="container">
+    <p>© 2026 Wedding Invitations. All rights reserved.</p>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+<script>if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");</script>
+</body>
+</html>
